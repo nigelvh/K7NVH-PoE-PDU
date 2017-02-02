@@ -10,7 +10,6 @@
 // Fix ADC reading
 // Fix Port control
 // Fix current/voltage limit checking
-// Fix input parse args handling two digit numbers
 
 #include "K7NVH_PoE_PDU.h"
 
@@ -192,14 +191,23 @@ static inline void INPUT_Clear(void) {
 // bits set.
 static inline void INPUT_Parse_args(pd_set *pd, char *str) {
 	*pd = 0;
-
+	uint8_t temp = 0;
+	
 	while (*str != 0 && str < (DATA_IN + DATA_BUFF_LEN)) {
-		if (*str >= '1' && *str <= '12') {
-			*pd = *pd | (1 << (*str - '1'));
-		} else if (*str == 'A' || *str == 'a') {
+		//while (*str == ' ') { str++; }
+		if (*str == 'A' || *str == 'a') {
 			*pd = 0b1111111111111111;
+		} else if (*str >= '0' && *str <= '9') {
+			if (temp > 0) temp = temp * 10;
+			temp = temp + (*str - '0');
+		} else if (temp >= 1 && temp <= 12) {
+			*pd = *pd | (1 << (temp - 1));
+			temp = 0;
 		}
 		str++;
+	}
+	if (temp >= 1 && temp <= 12) {
+		*pd = *pd | (1 << (temp - 1));
 	}
 }
 
