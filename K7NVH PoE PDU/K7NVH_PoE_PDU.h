@@ -61,12 +61,12 @@
 #define PCYCLE_MAX_TIME 30 // Seconds
 #define VREF_MAX 4300 // 4.3V * 1000
 #define VREF_MIN 4100 // 4.1V * 1000
-#define VCAL_MAX 150 // 15.0
-#define VCAL_MIN 70 // 7.0
+#define VCAL_MAX 170 // 17.0
+#define VCAL_MIN 130 // 13.0
 #define LIMIT_MAX 100 // Stored as amps*10 so 50==5.0A
-#define ICAL_MAX 160 // 160/10 = 16.0
-#define ICAL_MIN 60 // 60/10 = 6.0
-#define VMAX 40
+#define ICAL_MAX 512 // 512/10 = 51.2
+#define ICAL_MIN 488 // 488/10 = 48.8
+#define VMAX 50
 
 // Timing
 #define VCTL_DELAY 20 // Ticks. ~5s
@@ -179,16 +179,13 @@ const char STR_Command_SETVCTL[] PROGMEM = "SETVCTL";
 const uint8_t Ports_Pins[PORT_CNT] = \
 		{PD0, PD1, PD2, PD3, PD5, PD4, PD6, PD7, PB4, PB5, PB6, PC6};
 
-// Port to ADC Address look up table
-// PORT 1,2,3,4,5,6,7,8
-const uint8_t ADC_Ports[PORT_CNT] = \
-		{0b10000000, 0b10010000, 0b10100000, 0b10110000, \
-		 0b11000000, 0b11010000, 0b11100000, 0b11110000};
-// Input to ADC Address look up table
-// EXT1, EXT2, EXT3, EXT4, EXT5, EXT6, INPUT, TEMP
-const uint8_t ADC_Inputs[INPUT_CNT] = \
-		{0b10000000, 0b10010000, 0b10100000, 0b11010000, \
-		 0b11100000, 0b11110000, 0b10110000, 0b11000000};
+// Port to MUX lookup table
+const uint8_t Ports_Mux[PORT_CNT] = \
+		{3, 0, 1, 2, 4, 6, 3, 0, 1, 2, 4, 6};
+
+// Port to ADC lookup table
+const uint8_t Ports_ADC[PORT_CNT] = \
+		{5, 5, 5, 5, 5, 5, 4, 4, 4, 4, 4, 4};
 
 // State Variables
 ps_set PORT_STATE[PORT_CNT];
@@ -271,10 +268,11 @@ static inline void DEBUG_Dump(void);
 
 // ADC
 static inline float ADC_Read_Port_Current(uint8_t port);
-static inline float ADC_Read_Input_Voltage(void);
+static inline float ADC_Read_Main_Voltage(void);
+static inline float ADC_Read_Alt_Voltage(void);
 static inline float ADC_Read_Temperature(void);
-static inline float ADC_Read_Raw_Voltage(uint8_t port, uint8_t adc);
-static inline uint16_t ADC_Read_Raw(uint8_t port, uint8_t adc);
+static inline uint16_t ADC_Read_Raw(uint8_t adc);
+static inline void ADC_Set_MUX(uint8_t port);
 
 // Output
 static inline void printPGMStr(PGM_P s);

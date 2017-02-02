@@ -8,8 +8,10 @@
 
 
 // Fix ADC reading
-// Fix Port control
 // Fix current/voltage limit checking
+// Fix port selection for non INPUT_Parse_args() commands
+// Store which bus ports are on for power calculation
+// Add Check_Voltage_Cutoff checking for both busses based on ports attached
 
 #include "K7NVH_PoE_PDU.h"
 
@@ -66,6 +68,9 @@ int main(void) {
 	
 	// Set up LED pins
 	DDRB |= (1 << LED1)|(1 << LED2);
+
+	// Enable the ADC
+	ADCSRA = (1<<ADEN) | (1<<ADPS2) | (1<<ADPS0); // Enable ADC, clocked by /32 divider
 
 	// Read in stored port on/off states, and turn them on/off to match
 //	for (uint8_t i = 0; i < PORT_CNT; i++) {
@@ -472,13 +477,16 @@ static inline void INPUT_Parse(void) {
 
 // Print a summary of all ports status'
 static inline void PRINT_Status(void) {
-	float voltage, current;
+	float main_voltage, alt_voltage, current;
 	
 	// Voltage
-	voltage = ADC_Read_Input_Voltage();
-	printPGMStr(PSTR("\r\nVoltage: "));
-	fprintf(&USBSerialStream, "%.2fV", voltage);
-	
+	main_voltage = ADC_Read_Main_Voltage();
+	printPGMStr(PSTR("\r\nMain Voltage: "));
+	fprintf(&USBSerialStream, "%.2fV", main_voltage);
+	alt_voltage = ADC_Read_Alt_Voltage();
+	printPGMStr(PSTR("\r\nAlt Voltage: "));
+	fprintf(&USBSerialStream, "%.2fV", alt_voltage);
+		
 	// Temperature
 	printPGMStr(PSTR("\tTemperature: "));
 	fprintf(&USBSerialStream, "%.0fC", ADC_Read_Temperature());
@@ -502,7 +510,7 @@ static inline void PRINT_Status(void) {
 		fprintf(&USBSerialStream, "%.2fA ", current);
 		// Power reading
 		printPGMStr(PSTR("Power: "));
-		fprintf(&USBSerialStream, "%.1fW", (voltage * current));
+		fprintf(&USBSerialStream, "%.1fW", (main_voltage * current));
 		
 		// Overload?
 		if (PORT_STATE[i] & 0b00000010) { printPGMStr(STR_Overload); }
@@ -510,18 +518,13 @@ static inline void PRINT_Status(void) {
 		// Voltage Control?
 		if (PORT_STATE[i] & 0b00000100) { printPGMStr(STR_VCTL); }
 	}
-	
-	// Aux Inputs
-	printPGMStr(PSTR("\r\nAUX "));
-	for (uint8_t j = 0; j < 6; j++) {
-		fprintf(&USBSerialStream, "%i:%.2fV ", j+1, ADC_Read_Raw_Voltage(j, 1));
-	}
 }
 
 // Print programmatical status output
 static inline void PRINT_Status_Prog(void){
 	char temp_name[16];
-	float voltage = ADC_Read_Input_Voltage();
+	float main_voltage = ADC_Read_Main_Voltage();
+	float alt_voltage = ADC_Read_Alt_Voltage();
 	
 	// Device Description,Software version,Unit Name
 	EEPROM_Read_Port_Name(-1, temp_name); //PDU Name
@@ -529,12 +532,7 @@ static inline void PRINT_Status_Prog(void){
 	fprintf(&USBSerialStream, ",%s,%s", SOFTWARE_VERS, temp_name);
 	
 	// Input Voltage,Temperature
-	fprintf(&USBSerialStream, "\r\n%.2f,%.0f", voltage, ADC_Read_Temperature());
-	
-	// AIN1,AIN2,AIN3,AIN4,AIN5,AIN6
-	fprintf(&USBSerialStream, "\r\n%.2f,%.2f,%.2f,%.2f,%.2f,%.2f", ADC_Read_Raw_Voltage(0, 1), \
-		ADC_Read_Raw_Voltage(1, 1), ADC_Read_Raw_Voltage(2, 1), ADC_Read_Raw_Voltage(3, 1), \
-		ADC_Read_Raw_Voltage(4, 1), ADC_Read_Raw_Voltage(5, 1));
+	fprintf(&USBSerialStream, "\r\n%.2f,%.2f,%.0f", main_voltage, alt_voltage, ADC_Read_Temperature());
 	
 	// Port Number,Port Name,Enabled?,Current,Power,Overload
 	for (uint8_t i = 0; i < PORT_CNT; i++) {
@@ -545,7 +543,7 @@ static inline void PRINT_Status_Prog(void){
 		uint8_t port_vctl = (PORT_STATE[i] & 0b00000100) >> 2;
 		
 		float current = ADC_Read_Port_Current(i);
-		float power = current * voltage;
+		float power = current * main_voltage;
 		
 		fprintf(&USBSerialStream, "\r\n%i,%s,%i,%.2f,%.1f,%i,%i", i+1, temp_name, port_state, \
 			current, power, port_overload, port_vctl);
@@ -668,7 +666,7 @@ static inline uint8_t PORT_Check_Current_Limit(uint8_t port){
 // Checks the disable voltage setting for each port and disables the port if it has fallen 
 // below the cutoff threshold, and re-enables if it is above the cuton threshold.
 static inline void Check_Voltage_Cutoff(void){
-	float voltage = ADC_Read_Input_Voltage();
+	float voltage = ADC_Read_Main_Voltage();
 	
 	for (uint8_t i = 0; i < PORT_CNT; i++) {
 		if ((PORT_STATE[i] & 0b00000100) > 0) {
@@ -734,8 +732,8 @@ static inline void EEPROM_Write_REF_V(float reference) {
 // Read the stored reference voltage from EEPROM
 static inline float EEPROM_Read_V_CAL(void) {
 	uint8_t V_CAL = eeprom_read_byte((uint8_t*)(EEPROM_OFFSET_V_CAL));
-	// If the value seems out of range (uninitialized), default it to 11
-	if (V_CAL < VCAL_MIN || V_CAL > VCAL_MAX) V_CAL = 110;
+	// If the value seems out of range (uninitialized), default it to 15
+	if (V_CAL < VCAL_MIN || V_CAL > VCAL_MAX) V_CAL = 150;
 	return (float)(V_CAL / 10.0);
 }
 // Write the reference voltage to EEPROM
@@ -746,7 +744,7 @@ static inline void EEPROM_Write_V_CAL(float div) {
 // Read the stored port current calibration
 static inline float EEPROM_Read_I_CAL(uint8_t port) {
 	uint8_t I_CAL = eeprom_read_byte((uint8_t*)(EEPROM_OFFSET_I_CAL + port));
-	if(I_CAL < ICAL_MIN || I_CAL > ICAL_MAX) I_CAL = 110;
+	if(I_CAL < ICAL_MIN || I_CAL > ICAL_MAX) I_CAL = 500;
 	return (float)(I_CAL / 10.0);
 }
 // Write the port current calibration to EEPROM
@@ -904,47 +902,52 @@ static inline void DEBUG_Dump(void) {
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 // Read current flow on a given port
-static inline float ADC_Read_Port_Current(uint8_t port) {
-	float voltage = ADC_Read_Raw_Voltage(port, 0) / EEPROM_Read_I_CAL(port);
-	if (voltage < 0.001) voltage = 0.0; // Ignore the lowest voltages so we don't falsely say there's current where there isn't.
-	return (voltage / 0.05);
-}
+//static inline float ADC_Read_Port_Current(uint8_t port) {
+//	float voltage = ADC_Read_Raw_Voltage(port, 0) / EEPROM_Read_I_CAL(port);
+//	if (voltage < 0.001) voltage = 0.0; // Ignore the lowest voltages so we don't falsely say there's current where there isn't.
+//	return (voltage / 0.05);
+//}
 
-// Read input voltage
-static inline float ADC_Read_Input_Voltage(void) {
-	return (ADC_Read_Raw_Voltage(6, 1) * EEPROM_Read_V_CAL());
+// Read current flow on a given port
+static inline float ADC_Read_Port_Current(uint8_t port) {
+	ADC_Set_MUX(port);
+	float voltage = ADC_Read_Raw(Ports_ADC[port]) * (EEPROM_Read_REF_V() / 1024) * EEPROM_Read_I_CAL(port);
+	return (voltage / 0.02);
 }
 
 // Read temperature
 static inline float ADC_Read_Temperature(void) {
-	return ((ADC_Read_Raw_Voltage(7, 1) - 0.4) / 0.0195);
+	//return ((ADC_Read_Raw_Voltage(7, 1) - 0.4) / 0.0195);
+	return 0.0;
 }
 
-// Return the adc reading as a voltage referenced to REF_V
-static inline float ADC_Read_Raw_Voltage(uint8_t port, uint8_t adc) {
-	return (ADC_Read_Raw(port, adc) * (EEPROM_Read_REF_V() / 1024));
+// Read MAIN input voltage
+static inline float ADC_Read_Main_Voltage(void) {
+	return (ADC_Read_Raw(0) * (EEPROM_Read_REF_V() / 1024) * EEPROM_Read_V_CAL());
+}
+
+// Read ALT input voltage
+static inline float ADC_Read_Alt_Voltage(void) {
+	return (ADC_Read_Raw(1) * (EEPROM_Read_REF_V() / 1024) * EEPROM_Read_V_CAL());
 }
 
 // Return raw counts from the ADC
-static inline uint16_t ADC_Read_Raw(uint8_t port, uint8_t adc) {
-	uint8_t temp1,temp2,count;
+static inline uint16_t ADC_Read_Raw(uint8_t adc) {
+	uint8_t count;
 	uint16_t average = 0;
-	
-	// Take ADC_AVG_POINTS samples
+	ADMUX = adc;
 	for (count = 0; count < ADC_AVG_POINTS; count++) {
-
-		//PORTB &= ~(1 << SPI_SS_PORTS);
-		//SPI_transfer(0x01); // Start bit
-		//temp1 = SPI_transfer(ADC_Ports[port]); // Single ended, input number, clocking in 4 bits
-		//temp2 = SPI_transfer(0x00); // Clocking in 8 bits.
-		//PORTB |= (1 << SPI_SS_PORTS);
-		
-		// Add each sample to our average variable
-		average += (uint16_t)((temp1 & 0b00000011) << 8) | temp2;
+		ADCSRA |= (1<<ADSC); // Start conversion
+		while (ADCSRA & (1<<ADSC)); // Wait for conversion to complete
+		average += ADCW;
 	}
-	
-	// Divide by the number of samples, and return the end average
 	return (average / ADC_AVG_POINTS);
+}
+
+// Set the mux to the appropriate port
+static inline void ADC_Set_MUX(uint8_t port) {
+	uint8_t temp = PORTB;
+	PORTB = (PORTB & 0b11111000) | Ports_Mux[port];
 }
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
