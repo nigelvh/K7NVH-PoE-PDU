@@ -7,11 +7,11 @@
 // Up/down arrow keys?
 
 
-// Fix ADC reading
 // Fix current/voltage limit checking
 // Fix port selection for non INPUT_Parse_args() commands
 // Store which bus ports are on for power calculation
 // Add Check_Voltage_Cutoff checking for both busses based on ports attached
+// Fix startup port state
 
 #include "K7NVH_PoE_PDU.h"
 
@@ -68,9 +68,15 @@ int main(void) {
 	
 	// Set up LED pins
 	DDRB |= (1 << LED1)|(1 << LED2);
+	
+	// Set up SPI pins
+	DDRB |= (1 << SPI_SCK)|(1 << SPI_MOSI);
+	DDRF |= (1 << SPI_SS_1)|(1 << SPI_SS_2);
+	DDRB &= ~(1 << SPI_MISO);
+	PORTB &= ~(1 << SPI_MISO);
 
 	// Enable the ADC
-	ADCSRA = (1<<ADEN) | (1<<ADPS2) | (1<<ADPS0); // Enable ADC, clocked by /32 divider
+	ADCSRA = (1<<ADEN) | (1<<ADPS2) | (1<<ADPS1) | (1<<ADPS0); // Enable ADC, clocked by /128 divider
 
 	// Read in stored port on/off states, and turn them on/off to match
 //	for (uint8_t i = 0; i < PORT_CNT; i++) {
@@ -489,7 +495,7 @@ static inline void PRINT_Status(void) {
 		
 	// Temperature
 	printPGMStr(PSTR("\tTemperature: "));
-	fprintf(&USBSerialStream, "%.0fC", ADC_Read_Temperature());
+	fprintf(&USBSerialStream, "%dC", ADC_Read_Temperature());
 	
 	// Ports
 	for(uint8_t i = 0; i < PORT_CNT; i++) {
@@ -532,7 +538,7 @@ static inline void PRINT_Status_Prog(void){
 	fprintf(&USBSerialStream, ",%s,%s", SOFTWARE_VERS, temp_name);
 	
 	// Input Voltage,Temperature
-	fprintf(&USBSerialStream, "\r\n%.2f,%.2f,%.0f", main_voltage, alt_voltage, ADC_Read_Temperature());
+	fprintf(&USBSerialStream, "\r\n%.2f,%.2f,%d", main_voltage, alt_voltage, ADC_Read_Temperature());
 	
 	// Port Number,Port Name,Enabled?,Current,Power,Overload
 	for (uint8_t i = 0; i < PORT_CNT; i++) {
@@ -902,52 +908,82 @@ static inline void DEBUG_Dump(void) {
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 // Read current flow on a given port
-//static inline float ADC_Read_Port_Current(uint8_t port) {
-//	float voltage = ADC_Read_Raw_Voltage(port, 0) / EEPROM_Read_I_CAL(port);
-//	if (voltage < 0.001) voltage = 0.0; // Ignore the lowest voltages so we don't falsely say there's current where there isn't.
-//	return (voltage / 0.05);
-//}
-
-// Read current flow on a given port
 static inline float ADC_Read_Port_Current(uint8_t port) {
-	ADC_Set_MUX(port);
-	float voltage = ADC_Read_Raw(Ports_ADC[port]) * (EEPROM_Read_REF_V() / 1024) * EEPROM_Read_I_CAL(port);
+	float voltage = ADC_Read_Raw(port) * (EEPROM_Read_REF_V() / 1024) / EEPROM_Read_I_CAL(port);
 	return (voltage / 0.02);
 }
 
-// Read temperature
-static inline float ADC_Read_Temperature(void) {
-	//return ((ADC_Read_Raw_Voltage(7, 1) - 0.4) / 0.0195);
-	return 0.0;
+// Read temperature (die temperature, uncalibrated, +/-10C)
+static inline int16_t ADC_Read_Temperature(void) {
+	ADMUX = 0b11000111;
+	ADCSRB = 0b00100000;
+	ADCSRA |= (1<<ADSC); // Start first conversion (throw away)
+	while (ADCSRA & (1<<ADSC)); // Wait for conversion to complete
+	ADCSRA |= (1<<ADSC); // Start second conversion (valid)
+	while (ADCSRA & (1<<ADSC)); // Wait for conversion to complete
+	return ADCW - 273;
 }
 
 // Read MAIN input voltage
 static inline float ADC_Read_Main_Voltage(void) {
-	return (ADC_Read_Raw(0) * (EEPROM_Read_REF_V() / 1024) * EEPROM_Read_V_CAL());
+	return (ADC_Read_Raw(12) * (EEPROM_Read_REF_V() / 1024) * EEPROM_Read_V_CAL());
 }
 
 // Read ALT input voltage
 static inline float ADC_Read_Alt_Voltage(void) {
-	return (ADC_Read_Raw(1) * (EEPROM_Read_REF_V() / 1024) * EEPROM_Read_V_CAL());
+	return (ADC_Read_Raw(13) * (EEPROM_Read_REF_V() / 1024) * EEPROM_Read_V_CAL());
 }
 
 // Return raw counts from the ADC
-static inline uint16_t ADC_Read_Raw(uint8_t adc) {
-	uint8_t count;
+// Ports 0-11 are current sensors for the 12 ports
+// Port 12 is the ADC channel for the MAIN bus
+// Port 13 is the ADC channel for the ALT bus
+static inline uint16_t ADC_Read_Raw(uint8_t port) {
+	uint8_t temp1,temp2,count;
 	uint16_t average = 0;
-	ADMUX = adc;
+	
+	// Take ADC_AVG_POINTS samples
 	for (count = 0; count < ADC_AVG_POINTS; count++) {
-		ADCSRA |= (1<<ADSC); // Start conversion
-		while (ADCSRA & (1<<ADSC)); // Wait for conversion to complete
-		average += ADCW;
-	}
-	return (average / ADC_AVG_POINTS);
-}
+		if ((port >= 0 && port < 6) || port == 12 || port == 13) {
+#ifndef TESTBOARD
+			// SPI SS Pins
+#else
+			PORTF &= ~(1 << SPI_SS_1);
+#endif
+		} else if (port >= 6 && port < 12) {
+#ifndef TESTBOARD
+			// SPI SS Pins
+#else
+			PORTF &= ~(1 << SPI_SS_2);
+#endif		
+		} else {
+			// An invalid port was requested.
+			return 0;
+		}
+		
+		SPI_transfer(0x01); // Start bit
+		temp1 = SPI_transfer(Ports_ADC[port]); // Single ended, input number, clocking in 4 bits
+		temp2 = SPI_transfer(0x00); // Clocking in 8 bits.
 
-// Set the mux to the appropriate port
-static inline void ADC_Set_MUX(uint8_t port) {
-	uint8_t temp = PORTB;
-	PORTB = (PORTB & 0b11111000) | Ports_Mux[port];
+		if ((port >= 0 && port < 6) || port == 12 || port == 13) {
+#ifndef TESTBOARD
+			// SPI SS Pins
+#else
+			PORTF |= (1 << SPI_SS_1);
+#endif
+		} else if (port >= 6 && port < 12) {
+#ifndef TESTBOARD
+			// SPI SS Pins
+#else
+			PORTF |= (1 << SPI_SS_2);
+#endif		
+		}
+		
+		// Add each sample to our average variable
+		average += (uint16_t)((temp1 & 0b00000011) << 8) | temp2;
+	}
+	
+	return (average / ADC_AVG_POINTS);
 }
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -983,3 +1019,111 @@ void EVENT_USB_Device_ControlRequest(void) {
 	CDC_Device_ProcessControlRequest(&VirtualSerial_CDC_Interface);
 }
 
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// ~~ SPI Functions
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#ifndef TESTBOARD
+
+// Set up the SPI registers to enable the SPI hardware
+static inline void SPI_begin(void) {
+	// Set up SPI pins
+	DDRB |= (1 << SPI_SS_PORTS)|(1 << SPI_SCK)|(1 << SPI_MOSI);
+	DDRD |= (1 << SPI_SS_INPUTS);
+	PORTB |= (1 << SPI_SS_PORTS);
+	PORTD |= (1 << SPI_SS_INPUTS);
+	PORTB &= ~(1 << SPI_SCK);
+
+	// Enable SPI Master bit in the register
+	SPCR |= _BV(MSTR);
+	SPCR |= _BV(SPE);
+
+	// Set our mode options
+	SPI_setClockDivider(SPI_CLOCK_DIV128);
+	SPI_setDataMode(SPI_MODE0);
+	SPI_setBitOrder(1);
+}
+
+// Disable the SPI hardware
+static inline void SPI_end(void) {
+	SPCR &= ~_BV(SPE);
+}
+
+// Transfer out a byte on the SPI port, and simultaneously read a byte from SPI
+static inline uint8_t SPI_transfer(uint8_t _data) {
+	SPDR = _data;
+	while(!(SPSR & _BV(SPIF))) {};
+	return SPDR;
+}
+
+// 0 = LSBFIRST
+static inline void SPI_setBitOrder(uint8_t bitOrder) {
+	if (bitOrder == 0) {
+		SPCR |= _BV(DORD);
+	} else {
+		SPCR &= ~(_BV(DORD));
+	}
+}
+
+// Set SPI data mode (where in the cycle bits are to be read)
+static inline void SPI_setDataMode(uint8_t mode) {
+	SPCR = (SPCR & ~SPI_MODE_MASK) | mode;
+}
+
+// Set the SPI clock divider to determine overall speed
+static inline void SPI_setClockDivider(uint8_t rate) {
+	SPCR = (SPCR & ~SPI_CLOCK_MASK) | (rate & SPI_CLOCK_MASK);
+	SPSR = (SPSR & ~SPI_2XCLOCK_MASK) | ((rate >> 2) & SPI_2XCLOCK_MASK);
+}
+
+#else
+
+// Set up the port registers for SPI
+static inline void SPI_begin(void) {
+	// Set up SPI pins
+	DDRF |= (1 << SPI_SS_1) | (1 << SPI_SS_2);
+	DDRB |= (1 << SPI_SCK)|(1 << SPI_MOSI);
+	PORTF |= (1 << SPI_SS_1) | (1 << SPI_SS_2);
+	PORTB &= ~(1 << SPI_SCK);
+}
+
+// Transfer out a byte on the SPI port, and simultaneously read a byte from SPI
+static inline uint8_t SPI_transfer(uint8_t data) {
+	uint8_t value = 0;
+	uint8_t i;
+	
+	for (i = 0; i < 8; i++){
+		if (!!(data & (1 << (7 - i)))) {
+			PORTB |= (1 << SPI_MOSI);
+		} else {
+			PORTB &= ~(1 << SPI_MOSI);
+		}
+		PORTB |= (1 << SPI_SCK); // Clock pin high
+		value |= ((PINB & (1 << SPI_MISO)) >> SPI_MISO) << (7 - i);
+		PORTB &= ~(1 << SPI_SCK); // Clock pin low
+	}
+		
+	return value;
+}
+
+// Disable the SPI hardware
+static inline void SPI_end(void) {
+	// Do nothing, we're not using hardware SPI
+}
+
+// 0 = LSBFIRST
+static inline void SPI_setBitOrder(uint8_t bitOrder) {
+	// Do nothing, we're not using hardware SPI
+}
+
+// Set SPI data mode (where in the cycle bits are to be read)
+static inline void SPI_setDataMode(uint8_t mode) {
+	// Do nothing, we're not using hardware SPI
+}
+
+// Set the SPI clock divider to determine overall speed
+static inline void SPI_setClockDivider(uint8_t rate) {
+	// Do nothing, we're not using hardware SPI
+}
+
+#endif

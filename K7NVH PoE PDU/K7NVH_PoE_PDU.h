@@ -27,6 +27,8 @@
 // ~~ Macros
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+#define TESTBOARD
+
 // Enable ANSI color codes to be sent. Uses a small bit of extra program space for 
 // storage of color codes/modified strings.
 #define ENABLECOLORS
@@ -38,6 +40,38 @@
 #define INPUT_CNT	12
 #define DATA_BUFF_LEN    32
 #define ADC_AVG_POINTS   5
+
+#define SPI_CLOCK_DIV4 0x00
+#define SPI_CLOCK_DIV16 0x01
+#define SPI_CLOCK_DIV64 0x02
+#define SPI_CLOCK_DIV128 0x03
+#define SPI_CLOCK_DIV2 0x04
+#define SPI_CLOCK_DIV8 0x05
+#define SPI_CLOCK_DIV32 0x06
+
+#define SPI_MODE0 0x00
+#define SPI_MODE1 0x04
+#define SPI_MODE2 0x08
+#define SPI_MODE3 0x0C
+
+#define SPI_MODE_MASK 0x0C  // CPOL = bit 3, CPHA = bit 2 on SPCR
+#define SPI_CLOCK_MASK 0x03  // SPR1 = bit 1, SPR0 = bit 0 on SPCR
+#define SPI_2XCLOCK_MASK 0x01  // SPI2X = bit 0 on SPSR
+
+// SPI pins
+#ifndef TESTBOARD
+
+// Define the non-testboard SPI pins
+
+#else
+
+#define SPI_SS_1 PF5
+#define SPI_SS_2 PF4
+#define SPI_SCK PB1
+#define SPI_MOSI PB2
+#define SPI_MISO PB0
+
+#endif
 
 // Output port controls
 #define P1EN PD0
@@ -179,13 +213,11 @@ const char STR_Command_SETVCTL[] PROGMEM = "SETVCTL";
 const uint8_t Ports_Pins[PORT_CNT] = \
 		{PD0, PD1, PD2, PD3, PD5, PD4, PD6, PD7, PB4, PB5, PB6, PC6};
 
-// Port to MUX lookup table
-const uint8_t Ports_Mux[PORT_CNT] = \
-		{3, 0, 1, 2, 4, 6, 3, 0, 1, 2, 4, 6};
-
-// Port to ADC lookup table
-const uint8_t Ports_ADC[PORT_CNT] = \
-		{5, 5, 5, 5, 5, 5, 4, 4, 4, 4, 4, 4};
+// Port to ADC channel lookup table
+const uint8_t Ports_ADC[PORT_CNT + 2] = \
+		{0b10000000, 0b10010000, 0b10100000, 0b10110000, 0b11000000, 0b11010000, \
+		 0b10000000, 0b10010000, 0b10100000, 0b10110000, 0b11000000, 0b11010000, \
+		 0b11100000, 0b11110000};
 
 // State Variables
 ps_set PORT_STATE[PORT_CNT];
@@ -229,6 +261,14 @@ USB_ClassInfo_CDC_Device_t VirtualSerial_CDC_Interface = {
 	void (*bootloader)(void) = 0x3800;
 #endif
 
+// SPI
+static inline void SPI_begin(void);
+static inline void SPI_end(void);
+static inline uint8_t SPI_transfer(uint8_t _data);
+static inline void SPI_setBitOrder(uint8_t bitOrder);
+static inline void SPI_setDataMode(uint8_t mode);
+static inline void SPI_setClockDivider(uint8_t rate);
+
 // USB
 static inline void run_lufa(void);
 
@@ -270,9 +310,8 @@ static inline void DEBUG_Dump(void);
 static inline float ADC_Read_Port_Current(uint8_t port);
 static inline float ADC_Read_Main_Voltage(void);
 static inline float ADC_Read_Alt_Voltage(void);
-static inline float ADC_Read_Temperature(void);
+static inline int16_t ADC_Read_Temperature(void);
 static inline uint16_t ADC_Read_Raw(uint8_t adc);
-static inline void ADC_Set_MUX(uint8_t port);
 
 // Output
 static inline void printPGMStr(PGM_P s);
