@@ -11,7 +11,7 @@
 // Fix port selection for non INPUT_Parse_args() commands
 // Store which bus ports are on for power calculation
 // Add Check_Voltage_Cutoff checking for both busses based on ports attached
-// Fix startup port state
+// Add port calibration (read offset while ports are off)
 
 #include "K7NVH_PoE_PDU.h"
 
@@ -61,11 +61,6 @@ int main(void) {
 	fprintf(&USBSerialStream, " V%s,%s", HARDWARE_VERS, SOFTWARE_VERS);
 	run_lufa();
 
-	// Set up control pins
-	DDRD |= (1 << P1EN)|(1 << P2EN)|(1 << P3EN)|(1 << P4EN)|(1 << P5EN)|(1 << P6EN)|(1 << P7EN)|(1 << P8EN);
-	DDRB |= (1 << P9EN)|(1 << P10EN)|(1 << P11EN);
-	DDRC |= (1 << P12EN);
-	
 	// Set up LED pins
 	DDRB |= (1 << LED1)|(1 << LED2);
 	
@@ -78,12 +73,19 @@ int main(void) {
 	// Enable the ADC
 	ADCSRA = (1<<ADEN) | (1<<ADPS2) | (1<<ADPS1) | (1<<ADPS0); // Enable ADC, clocked by /128 divider
 
+	// Port control pins are currently inputs, set what we want them to be, then set them as outputs
+	// This avoids a blip turning ports off before re-enabling.
 	// Read in stored port on/off states, and turn them on/off to match
-//	for (uint8_t i = 0; i < PORT_CNT; i++) {
-//		PORT_BOOT_STATE[i] = EEPROM_Read_Port_Boot_State(i);
-//		if (PORT_BOOT_STATE[i] & 0b00000001) { PORT_CTL(i, 1); } else { PORT_CTL(i, 0); } // Enable port if set
-//		if (PORT_BOOT_STATE[i] & 0b00000010) { PORT_STATE[i] |= 0b00000100; } // Enable VCTL if set
-//	}
+	for (uint8_t i = 0; i < PORT_CNT; i++) {
+		PORT_BOOT_STATE[i] = EEPROM_Read_Port_Boot_State(i);
+		if (PORT_BOOT_STATE[i] & 0b00000001) { PORT_CTL(i, 1); } else { PORT_CTL(i, 0); } // Enable port if set
+		if (PORT_BOOT_STATE[i] & 0b00000010) { PORT_STATE[i] |= 0b00000100; } // Enable VCTL if set
+	}
+	// Set up control pins
+	DDRD |= (1 << P1EN)|(1 << P2EN)|(1 << P3EN)|(1 << P4EN)|(1 << P5EN)|(1 << P6EN)|(1 << P7EN)|(1 << P8EN);
+	DDRB |= (1 << P9EN)|(1 << P10EN)|(1 << P11EN);
+	DDRC |= (1 << P12EN);
+	
 	run_lufa();
 
 	INPUT_Clear();
@@ -441,12 +443,23 @@ static inline void INPUT_Parse(void) {
 			return;
 		}
 	}
-	// SETVCAL - Set the VCAL and store in EEPROM to correct voltage readings.
-	if (strncasecmp_P(DATA_IN, STR_Command_SETVCAL, 7) == 0) {
-		uint16_t temp_set_vdiv = atoi(DATA_IN + 7);
+	// SETVCALM - Set the MAIN bus VCAL and store in EEPROM to correct voltage readings.
+	if (strncasecmp_P(DATA_IN, STR_Command_SETVCALM, 8) == 0) {
+		uint16_t temp_set_vdiv = atoi(DATA_IN + 8);
 		if (temp_set_vdiv >= VCAL_MIN && temp_set_vdiv <= VCAL_MAX){
 			float temp_vdiv = (float)temp_set_vdiv / 10.0;
-			EEPROM_Write_V_CAL(temp_vdiv);
+			EEPROM_Write_V_CAL_MAIN(temp_vdiv);
+			printPGMStr(STR_VCAL);
+			fprintf(&USBSerialStream, "%.1f", temp_vdiv);
+			return;
+		}
+	}
+	// SETVCALA - Set the ALT bus VCAL and store in EEPROM to correct voltage readings.
+	if (strncasecmp_P(DATA_IN, STR_Command_SETVCALA, 8) == 0) {
+		uint16_t temp_set_vdiv = atoi(DATA_IN + 8);
+		if (temp_set_vdiv >= VCAL_MIN && temp_set_vdiv <= VCAL_MAX){
+			float temp_vdiv = (float)temp_set_vdiv / 10.0;
+			EEPROM_Write_V_CAL_ALT(temp_vdiv);
 			printPGMStr(STR_VCAL);
 			fprintf(&USBSerialStream, "%.1f", temp_vdiv);
 			return;
@@ -735,27 +748,38 @@ static inline void EEPROM_Write_REF_V(float reference) {
 	eeprom_update_float((float*)(EEPROM_OFFSET_REF_V), reference);
 }
 
-// Read the stored reference voltage from EEPROM
-static inline float EEPROM_Read_V_CAL(void) {
-	uint8_t V_CAL = eeprom_read_byte((uint8_t*)(EEPROM_OFFSET_V_CAL));
+// Read the main bus divider calibration from EEPROM
+static inline float EEPROM_Read_V_CAL_MAIN(void) {
+	uint8_t V_CAL = eeprom_read_byte((uint8_t*)(EEPROM_OFFSET_V_CAL_MAIN));
 	// If the value seems out of range (uninitialized), default it to 15
 	if (V_CAL < VCAL_MIN || V_CAL > VCAL_MAX) V_CAL = 150;
 	return (float)(V_CAL / 10.0);
 }
-// Write the reference voltage to EEPROM
-static inline void EEPROM_Write_V_CAL(float div) {
-	eeprom_update_byte((uint8_t*)(EEPROM_OFFSET_V_CAL), (int)(div * 10.0));
+// Write the main bus divider calibration to EEPROM
+static inline void EEPROM_Write_V_CAL_MAIN(float div) {
+	eeprom_update_byte((uint8_t*)(EEPROM_OFFSET_V_CAL_MAIN), (int)(div * 10.0));
+}
+// Read the alt bus divider calibration from EEPROM
+static inline float EEPROM_Read_V_CAL_ALT(void) {
+	uint8_t V_CAL = eeprom_read_byte((uint8_t*)(EEPROM_OFFSET_V_CAL_ALT));
+	// If the value seems out of range (uninitialized), default it to 15
+	if (V_CAL < VCAL_MIN || V_CAL > VCAL_MAX) V_CAL = 150;
+	return (float)(V_CAL / 10.0);
+}
+// Write the alt bus divider calibration to EEPROM
+static inline void EEPROM_Write_V_CAL_ALT(float div) {
+	eeprom_update_byte((uint8_t*)(EEPROM_OFFSET_V_CAL_ALT), (int)(div * 10.0));
 }
 
 // Read the stored port current calibration
 static inline float EEPROM_Read_I_CAL(uint8_t port) {
-	uint8_t I_CAL = eeprom_read_byte((uint8_t*)(EEPROM_OFFSET_I_CAL + port));
+	uint16_t I_CAL = eeprom_read_word((uint16_t*)(EEPROM_OFFSET_I_CAL + (port*2)));
 	if(I_CAL < ICAL_MIN || I_CAL > ICAL_MAX) I_CAL = 500;
 	return (float)(I_CAL / 10.0);
 }
 // Write the port current calibration to EEPROM
 static inline void EEPROM_Write_I_CAL(uint8_t port, float cal) {
-	eeprom_update_byte((uint8_t*)(EEPROM_OFFSET_I_CAL + port), (int)(cal * 10.0));
+	eeprom_update_word((uint16_t*)(EEPROM_OFFSET_I_CAL + (port*2)), (int)(cal * 10.0));
 }
 
 // Read PCYCLE_TIME from EEPROM
@@ -840,7 +864,7 @@ static inline void EEPROM_Write_Port_CutOn(uint8_t port, uint16_t cuton) {
 
 // Reset all EEPROM values to 255
 static inline void EEPROM_Reset(void) {
-	for (uint16_t i = 0; i < 256; i++) {
+	for (uint16_t i = 0; i < 512; i++) {
 		eeprom_update_byte((uint8_t*)(i), 255);
 	}
 }
@@ -865,11 +889,12 @@ static inline void DEBUG_Dump(void) {
 	fprintf(&USBSerialStream, "%.2f:%.2f", eeprom_read_float((float*)(EEPROM_OFFSET_REF_V)), EEPROM_Read_REF_V());
 	// Read V_CAL
 	printPGMStr(STR_VCAL);
-	fprintf(&USBSerialStream, "%i:%.1f", eeprom_read_byte((uint8_t*)(EEPROM_OFFSET_V_CAL)), EEPROM_Read_V_CAL());
+	fprintf(&USBSerialStream, "MAIN: %i:%.1f", eeprom_read_byte((uint8_t*)(EEPROM_OFFSET_V_CAL_MAIN)), EEPROM_Read_V_CAL_MAIN());
+	fprintf(&USBSerialStream, " ALT: %i:%.1f", eeprom_read_byte((uint8_t*)(EEPROM_OFFSET_V_CAL_ALT)), EEPROM_Read_V_CAL_ALT());
 	// Read I_CAL
 	printPGMStr(STR_ICAL);
 	for (uint8_t i = 0; i < PORT_CNT; i++) {
-		fprintf(&USBSerialStream, "%i:%.1f ", eeprom_read_byte((uint8_t*)(EEPROM_OFFSET_I_CAL + i)), EEPROM_Read_I_CAL(i));
+		fprintf(&USBSerialStream, "%i:%.1f ", eeprom_read_word((uint16_t*)(EEPROM_OFFSET_I_CAL + i)), EEPROM_Read_I_CAL(i));
 	}
 	
 	// Read Port Cycle Time
@@ -926,12 +951,12 @@ static inline int16_t ADC_Read_Temperature(void) {
 
 // Read MAIN input voltage
 static inline float ADC_Read_Main_Voltage(void) {
-	return (ADC_Read_Raw(12) * (EEPROM_Read_REF_V() / 1024) * EEPROM_Read_V_CAL());
+	return (ADC_Read_Raw(12) * (EEPROM_Read_REF_V() / 1024) * EEPROM_Read_V_CAL_MAIN());
 }
 
 // Read ALT input voltage
 static inline float ADC_Read_Alt_Voltage(void) {
-	return (ADC_Read_Raw(13) * (EEPROM_Read_REF_V() / 1024) * EEPROM_Read_V_CAL());
+	return (ADC_Read_Raw(13) * (EEPROM_Read_REF_V() / 1024) * EEPROM_Read_V_CAL_ALT());
 }
 
 // Return raw counts from the ADC

@@ -98,8 +98,8 @@
 #define VCAL_MAX 170 // 17.0
 #define VCAL_MIN 130 // 13.0
 #define LIMIT_MAX 100 // Stored as amps*10 so 50==5.0A
-#define ICAL_MAX 512 // 512/10 = 51.2
-#define ICAL_MIN 488 // 488/10 = 48.8
+#define ICAL_MAX 520 // 52
+#define ICAL_MIN 480 // 48
 #define VMAX 50
 
 // Timing
@@ -107,30 +107,34 @@
 #define ICTL_DELAY 1 // Ticks. ~0.25s
 
 // EEPROM Offsets
-#define EEPROM_OFFSET_PORT_DEFAULTS 0 // 12 bytes at offset 0
-#define EEPROM_OFFSET_REF_V 12 // 4 bytes at offset 12
-#define EEPROM_OFFSET_V_CAL 16 // 1 bytes at offset 16
-#define EEPROM_OFFSET_CYCLE_TIME 17 // 1 byte at offset 17
-// 18-23
-#define EEPROM_OFFSET_LIMIT 24 // 8 Bytes at offset 24
-#define EEPROM_OFFSET_I_CAL 32 // 8 Bytes at offset 32
-// 40-47
-#define EEPROM_OFFSET_PDUNAME 48 // 16 bytes at offset 48
-#define EEPROM_OFFSET_P0NAME 64 // 16 bytes at offset 64
-#define EEPROM_OFFSET_P1NAME 80 // 16 bytes at offset 80
-#define EEPROM_OFFSET_P2NAME 96 // 16 bytes at offset 96
-#define EEPROM_OFFSET_P3NAME 112 // 16 bytes at offset 112
-#define EEPROM_OFFSET_P4NAME 128 // 16 bytes at offset 128
-#define EEPROM_OFFSET_P5NAME 144 // 16 bytes at offset 144
-#define EEPROM_OFFSET_P6NAME 160 // 16 bytes at offset 160
-#define EEPROM_OFFSET_P7NAME 176 // 16 bytes at offset 176
-#define EEPROM_OFFSET_P8NAME 192 // 16 Bytes at offset 192
-#define EEPROM_OFFSET_P9NAME 208 // 16 Bytes at offset 208
-#define EEPROM_OFFSET_P10NAME 224 // 16 Bytes at offset 224
-#define EEPROM_OFFSET_P11NAME 240 // 16 Bytes at offset 240
-
-#define EEPROM_OFFSET_V_CUTOFF 256 // 16 Bytes at offset 256
-#define EEPROM_OFFSET_V_CUTON 272 // 16 Bytes at offset 272
+// Stored settings
+#define EEPROM_OFFSET_PORT_DEFAULTS 0 // 16 bytes at offset 0
+#define EEPROM_OFFSET_CYCLE_TIME 16 // 1 byte at offset 17
+// Calibration values
+#define EEPROM_OFFSET_REF_V 154 // 4 bytes - Calibrate the ADC reference voltage
+#define EEPROM_OFFSET_V_CAL_MAIN 158 // 1 byte - Calibrate the main bus voltage sense divider
+#define EEPROM_OFFSET_V_CAL_ALT 159 // 1 byte - Calibrate the alt bus voltage sense divider
+#define EEPROM_OFFSET_SENSE_CAL 160 // 16 Bytes - Calibrate the 0 current sensor offset (in ADC counts)
+#define EEPROM_OFFSET_I_CAL 176 // 32 Bytes - Calibrate the current sense gain figure
+// Per port current thresholds
+#define EEPROM_OFFSET_LIMIT 208 // 32 Bytes at offset 24
+// Per port voltage thresholds
+#define EEPROM_OFFSET_V_CUTOFF 240 // 32 Bytes
+#define EEPROM_OFFSET_V_CUTON 272 // 32 Bytes
+// Names
+#define EEPROM_OFFSET_PDUNAME 304 // 16 bytes
+#define EEPROM_OFFSET_P0NAME 320 // 16 bytes
+#define EEPROM_OFFSET_P1NAME 336 // 16 bytes
+#define EEPROM_OFFSET_P2NAME 352 // 16 bytes
+#define EEPROM_OFFSET_P3NAME 368 // 16 bytes
+#define EEPROM_OFFSET_P4NAME 384 // 16 bytes
+#define EEPROM_OFFSET_P5NAME 400 // 16 bytes
+#define EEPROM_OFFSET_P6NAME 416 // 16 bytes
+#define EEPROM_OFFSET_P7NAME 432 // 16 bytes
+#define EEPROM_OFFSET_P8NAME 448 // 16 Bytes
+#define EEPROM_OFFSET_P9NAME 464 // 16 Bytes
+#define EEPROM_OFFSET_P10NAME 480 // 16 Bytes
+#define EEPROM_OFFSET_P11NAME 496 // 16 Bytes
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // ~~ Globals
@@ -202,7 +206,8 @@ const char STR_Command_PCYCLE[] PROGMEM = "PCYCLE";
 const char STR_Command_SETCYCLE[] PROGMEM = "SETCYCLE";
 const char STR_Command_SETDEF[] PROGMEM = "SETDEF";
 const char STR_Command_SETVREF[] PROGMEM = "SETVREF";
-const char STR_Command_SETVCAL[] PROGMEM = "SETVCAL";
+const char STR_Command_SETVCALM[] PROGMEM = "SETVCALM";
+const char STR_Command_SETVCALA[] PROGMEM = "SETVCALA";
 const char STR_Command_SETICAL[] PROGMEM = "SETICAL";
 const char STR_Command_SETNAME[] PROGMEM = "SETNAME";
 const char STR_Command_SETLIMIT[] PROGMEM = "SETLIMIT";
@@ -287,8 +292,10 @@ static inline uint8_t EEPROM_Read_Port_Boot_State(uint8_t port);
 static inline void EEPROM_Write_Port_Boot_State(uint8_t port, uint8_t state);
 static inline float EEPROM_Read_REF_V(void);
 static inline void EEPROM_Write_REF_V(float reference);
-static inline float EEPROM_Read_V_CAL(void);
-static inline void EEPROM_Write_V_CAL(float div);
+static inline float EEPROM_Read_V_CAL_MAIN(void);
+static inline void EEPROM_Write_V_CAL_MAIN(float div);
+static inline float EEPROM_Read_V_CAL_ALT(void);
+static inline void EEPROM_Write_V_CAL_ALT(float div);
 static inline float EEPROM_Read_I_CAL(uint8_t port);
 static inline void EEPROM_Write_I_CAL(uint8_t port, float cal);
 static inline uint8_t EEPROM_Read_PCycle_Time(void);
