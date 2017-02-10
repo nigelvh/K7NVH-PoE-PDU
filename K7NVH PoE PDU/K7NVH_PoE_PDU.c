@@ -26,6 +26,7 @@ ISR(WDT_vect){
 int main(void) {
 	// Initialize some variables
 	int16_t BYTE_IN = -1;
+	DATA_IN = malloc(DATA_BUFF_LEN);
 	
 	// Set the watchdog timer to interrupt for timekeeping
 	MCUSR &= ~(1 << WDRF);
@@ -225,31 +226,24 @@ static inline void INPUT_Parse_args(pd_set *pd, char *str) {
 }
 
 // Parse out a single port number argument
-static inline int8_t INPUT_Parse_port(char **str) {
-	int8_t temp = -1;
+static inline int8_t INPUT_Parse_port() {
+	int8_t temp = 0;
 	
-	(*str)++;
-	//fprintf(&USBSerialStream, "\r\n%s", *str);
-	
-	
-	return -1;
-
-/*
-	while (**str != 0 && *str < (DATA_IN + DATA_BUFF_LEN)) {
-		fprintf(&USBSerialStream, "\r\n%s", *str);
-		if (**str >= '0' && **str <= '9') {
+	while (*DATA_IN != 0) {
+		fprintf(&USBSerialStream, "\r\n%s", DATA_IN);
+		if (*DATA_IN >= '0' && *DATA_IN <= '9') {
 			if (temp > 0) temp = temp * 10;
-			temp = temp + (**str - '0');
-		} else if (temp >= 0 && temp <= 12) {
+			temp = temp + (*DATA_IN - '0');
+		} else if (temp > 0 && temp <= 12) {
 			return (temp);
 		}
-		*str++;
+		DATA_IN++;
 	}
-	if (temp >= 0 && temp <= 12) {
+	if (temp > 0 && temp <= 12) {
 		return (temp);
 	}
+	
 	return -1;
-*/
 }
 
 // We've gotten a new command, parse out what they want.
@@ -419,8 +413,8 @@ static inline void INPUT_Parse(void) {
 
 		//char *str = DATA_IN + 7;
 		fprintf(&USBSerialStream, "\r\n%s", DATA_IN);
-		portid = INPUT_Parse_port(&DATA_IN);
-		fprintf(&USBSerialStream, "\r\n%s", DATA_IN);
+		portid = INPUT_Parse_port();
+		fprintf(&USBSerialStream, "\r\n%s - PORT: %i", DATA_IN, portid);
 		
 /*		
 		if (portid > 0) {

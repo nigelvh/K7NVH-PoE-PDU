@@ -229,7 +229,7 @@ const uint8_t Ports_ADC[PORT_CNT + 2] = \
 // State Variables
 ps_set PORT_STATE[PORT_CNT];
 pbs_set PORT_BOOT_STATE[PORT_CNT];
-char * DATA_IN = malloc(DATA_BUFF_LEN);
+char * DATA_IN;
 uint8_t DATA_IN_POS = 0;
 
 /** LUFA CDC Class driver interface configuration and state information.
@@ -332,6 +332,6 @@ static inline void PRINT_Help(void);
 static inline void INPUT_Clear(void);
 static inline void INPUT_Parse(void);
 static inline void INPUT_Parse_args(pd_set *pd, char *str);
-static inline int8_t INPUT_Parse_port(char **str);
+static inline int8_t INPUT_Parse_port();
 
 #endif
