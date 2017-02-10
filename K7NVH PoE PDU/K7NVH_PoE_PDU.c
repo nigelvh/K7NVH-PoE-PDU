@@ -164,10 +164,10 @@ int main(void) {
 		LED_CTL(0, 0);
 		
 		// Check for above threshold current usage
-//		if (check_current) {
-//			Check_Current_Limits();
-//			check_current = 0;
-//		}
+		if (check_current) {
+			Check_Current_Limits();
+			check_current = 0;
+		}
 		
 		// Timer interval, check voltage control
 //		if (check_voltage) {
@@ -207,7 +207,6 @@ static inline void INPUT_Parse_args(pd_set *pd, char *str) {
 	uint8_t temp = 0;
 	
 	while (*str != 0 && str < (DATA_IN + DATA_BUFF_LEN)) {
-		//while (*str == ' ') { str++; }
 		if (*str == 'A' || *str == 'a') {
 			*pd = 0b1111111111111111;
 		} else if (*str >= '0' && *str <= '9') {
@@ -222,6 +221,34 @@ static inline void INPUT_Parse_args(pd_set *pd, char *str) {
 	if (temp >= 1 && temp <= 12) {
 		*pd = *pd | (1 << (temp - 1));
 	}
+}
+
+// Parse out a single port number argument
+static inline int8_t INPUT_Parse_port(char *str) {
+	int8_t temp = -1;
+	
+	str++;
+	fprintf(&USBSerialStream, "\r\n%s", str);
+	
+	
+	return -1;
+
+/*
+	while (**str != 0 && *str < (DATA_IN + DATA_BUFF_LEN)) {
+		fprintf(&USBSerialStream, "\r\n%s", *str);
+		if (**str >= '0' && **str <= '9') {
+			if (temp > 0) temp = temp * 10;
+			temp = temp + (**str - '0');
+		} else if (temp >= 0 && temp <= 12) {
+			return (temp);
+		}
+		*str++;
+	}
+	if (temp >= 0 && temp <= 12) {
+		return (temp);
+	}
+	return -1;
+*/
 }
 
 // We've gotten a new command, parse out what they want.
@@ -381,14 +408,30 @@ static inline void INPUT_Parse(void) {
 				}
 			}
 		}
-		// EEPROM_Write_Port_CutOff(uint8_t port, uint16_t cutoff)
-		// EEPROM_Write_Port_CutOn(uint8_t port, uint16_t cuton)
 	}
 	// SETNAME - Set the name for a given port.
 	if (strncasecmp_P(DATA_IN, STR_Command_SETNAME, 7) == 0) {
-		char *str = DATA_IN + 7;
+		//char *str = DATA_IN + 7;
 		int8_t portid;
 		char temp_name[16];
+
+
+		//char *str = DATA_IN + 7;
+		fprintf(&USBSerialStream, "\r\n%s", DATA_IN);
+		portid = INPUT_Parse_port(DATA_IN);
+		fprintf(&USBSerialStream, "\r\n%s", DATA_IN);
+		
+/*		
+		if (portid > 0) {
+			EEPROM_Write_Port_Name(portid - 1, str);
+			printPGMStr(STR_NR_Port);
+			EEPROM_Read_Port_Name(portid - 1, temp_name);
+			fprintf(&USBSerialStream, "%i NAME: %s", portid, temp_name);
+			return;
+		} else if (portid == 0) {
+			EEPROM_Write_Port_Name(-1, str);
+			return;
+		}
 
 		while (*str == ' ' || *str == '\t') str++;
 		if (*str >= '1' && *str <= '8') {
@@ -412,6 +455,7 @@ static inline void INPUT_Parse(void) {
 			EEPROM_Write_Port_Name(portid, str);
 			return;
 		}
+*/
 	}
 	// SETLIMIT - Set the current limit for a given port.
 	if (strncasecmp_P(DATA_IN, STR_Command_SETLIMIT, 8) == 0) {
@@ -632,21 +676,29 @@ static inline void PORT_CTL(uint8_t port, uint8_t state) {
 // LED 0 == Green, LED 1 == Red
 static inline void LED_CTL(uint8_t led, uint8_t state) {
 	if (state == 1) {
-		PORTB |= (1 << (LED1 + led));
+		if (led == 1) {
+			PORTB |= (1 << LED1);
+		} else {
+			PORTB |= (1 << LED2);
+		}
 	} else {
-		PORTB &= ~(1 << (LED1 + led));
+		if (led == 1) {
+			PORTB &= ~(1 << LED1);
+		} else {
+			PORTB &= ~(1 << LED2);
+		}
 	}
 }
 
 // Check all ports for exceeding current limits, disable the port, and set the RED led.
 static inline void Check_Current_Limits(void){
 	// Check for above threshold current usage
-	for (uint8_t i = 0; i < 8; i++) {
+	for (uint8_t i = 0; i < PORT_CNT; i++) {
 		if (PORT_Check_Current_Limit(i)) {
 			// Current is above threshold. Print a warning message.
 			fprintf(&USBSerialStream, "\r\n");
 			printPGMStr(STR_Overload);
-				
+						
 			// Disable the port
 			PORT_CTL(i, 0);
 			

@@ -330,5 +330,6 @@ static inline void PRINT_Help(void);
 static inline void INPUT_Clear(void);
 static inline void INPUT_Parse(void);
 static inline void INPUT_Parse_args(pd_set *pd, char *str);
+static inline int8_t INPUT_Parse_port(char *str);
 
 #endif
