@@ -149,10 +149,10 @@ volatile uint8_t check_current = 0;
 typedef uint16_t pd_set; // Port Descriptor Set - bitmap of ports
 
 // Port State Set - bitmap of port state
-// (NUL,NUL,NUL,NUL,VCTL Changing,VCTL Enabled?,Overload,Enabled?)
+// (NUL,NUL,NUL,AUX bus?,VCTL Changing,VCTL Enabled?,Overload,Enabled?)
 typedef uint8_t ps_set;
 // Port Boot State Set - bitmap of port boot state
-// (NUL,NUL,NUL,NUL,NUL,NUL,VCTL Enabled?,Enabled?)
+// (NUL,NUL,NUL,NUL,NUL,AUX bus?,VCTL Enabled?,Enabled?)
 typedef uint8_t pbs_set;
 
 // Standard file stream for the CDC interface when set up, so that the
@@ -194,6 +194,8 @@ const char STR_Port_VCTL[] PROGMEM = "\r\nPORT VCTL: ";
 const char STR_VREF[] PROGMEM = "\r\nVREF: ";
 const char STR_VCAL[] PROGMEM = "\r\nVCAL: ";
 const char STR_ICAL[] PROGMEM = "\r\nICAL: ";
+const char STR_MAIN[] PROGMEM = "MAIN";
+const char STR_ALT[] PROGMEM = "ALT";
 
 // Command strings
 const char STR_Command_HELP[] PROGMEM = "HELP";
@@ -206,13 +208,13 @@ const char STR_Command_PCYCLE[] PROGMEM = "PCYCLE";
 const char STR_Command_SETCYCLE[] PROGMEM = "SETCYCLE";
 const char STR_Command_SETDEF[] PROGMEM = "SETDEF";
 const char STR_Command_SETVREF[] PROGMEM = "SETVREF";
-const char STR_Command_SETVCALM[] PROGMEM = "SETVCALM";
-const char STR_Command_SETVCALA[] PROGMEM = "SETVCALA";
+const char STR_Command_SETVCAL[] PROGMEM = "SETVCAL";
 const char STR_Command_SETICAL[] PROGMEM = "SETICAL";
 const char STR_Command_SETNAME[] PROGMEM = "SETNAME";
 const char STR_Command_SETLIMIT[] PROGMEM = "SETLIMIT";
 const char STR_Command_VCTL[] PROGMEM = "VCTL";
 const char STR_Command_SETVCTL[] PROGMEM = "SETVCTL";
+const char STR_Command_SETBUS[] PROGMEM = "SETBUS";
 
 // Port to pin lookup table
 const uint8_t Ports_Pins[PORT_CNT] = \
@@ -227,7 +229,7 @@ const uint8_t Ports_ADC[PORT_CNT + 2] = \
 // State Variables
 ps_set PORT_STATE[PORT_CNT];
 pbs_set PORT_BOOT_STATE[PORT_CNT];
-char DATA_IN[DATA_BUFF_LEN];
+char * DATA_IN = malloc(DATA_BUFF_LEN);
 uint8_t DATA_IN_POS = 0;
 
 /** LUFA CDC Class driver interface configuration and state information.
@@ -330,6 +332,6 @@ static inline void PRINT_Help(void);
 static inline void INPUT_Clear(void);
 static inline void INPUT_Parse(void);
 static inline void INPUT_Parse_args(pd_set *pd, char *str);
-static inline int8_t INPUT_Parse_port(char *str);
+static inline int8_t INPUT_Parse_port(char **str);
 
 #endif

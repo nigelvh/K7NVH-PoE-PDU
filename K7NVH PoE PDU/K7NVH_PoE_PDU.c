@@ -80,6 +80,7 @@ int main(void) {
 		PORT_BOOT_STATE[i] = EEPROM_Read_Port_Boot_State(i);
 		if (PORT_BOOT_STATE[i] & 0b00000001) { PORT_CTL(i, 1); } else { PORT_CTL(i, 0); } // Enable port if set
 		if (PORT_BOOT_STATE[i] & 0b00000010) { PORT_STATE[i] |= 0b00000100; } // Enable VCTL if set
+		if (PORT_BOOT_STATE[i] & 0b00000100) { PORT_STATE[i] |= 0b00010000; } // Port is on AUX bus (used for power calculations)
 	}
 	// Set up control pins
 	DDRD |= (1 << P1EN)|(1 << P2EN)|(1 << P3EN)|(1 << P4EN)|(1 << P5EN)|(1 << P6EN)|(1 << P7EN)|(1 << P8EN);
@@ -224,11 +225,11 @@ static inline void INPUT_Parse_args(pd_set *pd, char *str) {
 }
 
 // Parse out a single port number argument
-static inline int8_t INPUT_Parse_port(char *str) {
+static inline int8_t INPUT_Parse_port(char **str) {
 	int8_t temp = -1;
 	
-	str++;
-	fprintf(&USBSerialStream, "\r\n%s", str);
+	(*str)++;
+	//fprintf(&USBSerialStream, "\r\n%s", *str);
 	
 	
 	return -1;
@@ -418,7 +419,7 @@ static inline void INPUT_Parse(void) {
 
 		//char *str = DATA_IN + 7;
 		fprintf(&USBSerialStream, "\r\n%s", DATA_IN);
-		portid = INPUT_Parse_port(DATA_IN);
+		portid = INPUT_Parse_port(&DATA_IN);
 		fprintf(&USBSerialStream, "\r\n%s", DATA_IN);
 		
 /*		
@@ -487,26 +488,25 @@ static inline void INPUT_Parse(void) {
 			return;
 		}
 	}
-	// SETVCALM - Set the MAIN bus VCAL and store in EEPROM to correct voltage readings.
-	if (strncasecmp_P(DATA_IN, STR_Command_SETVCALM, 8) == 0) {
-		uint16_t temp_set_vdiv = atoi(DATA_IN + 8);
-		if (temp_set_vdiv >= VCAL_MIN && temp_set_vdiv <= VCAL_MAX){
-			float temp_vdiv = (float)temp_set_vdiv / 10.0;
-			EEPROM_Write_V_CAL_MAIN(temp_vdiv);
-			printPGMStr(STR_VCAL);
-			fprintf(&USBSerialStream, "%.1f", temp_vdiv);
-			return;
+	// SETVCAL - Set the ALT bus VCAL and store in EEPROM to correct voltage readings.
+	if (strncasecmp_P(DATA_IN, STR_Command_SETVCAL, 7) == 0) {
+		char * str = DATA_IN + 7;
+		uint8_t setting = 255;
+		if (strncasecmp_P(str, STR_MAIN, 4) == 0) {
+			setting = 0;
 		}
-	}
-	// SETVCALA - Set the ALT bus VCAL and store in EEPROM to correct voltage readings.
-	if (strncasecmp_P(DATA_IN, STR_Command_SETVCALA, 8) == 0) {
-		uint16_t temp_set_vdiv = atoi(DATA_IN + 8);
-		if (temp_set_vdiv >= VCAL_MIN && temp_set_vdiv <= VCAL_MAX){
-			float temp_vdiv = (float)temp_set_vdiv / 10.0;
-			EEPROM_Write_V_CAL_ALT(temp_vdiv);
-			printPGMStr(STR_VCAL);
-			fprintf(&USBSerialStream, "%.1f", temp_vdiv);
-			return;
+		if (strncasecmp_P(str, STR_ALT, 3) == 0) {
+			setting = 1;
+		}
+		if (setting <= 1) {
+			uint16_t temp_set_vdiv = atoi((setting ? DATA_IN+11 : DATA_IN+10));
+			if (temp_set_vdiv >= VCAL_MIN && temp_set_vdiv <= VCAL_MAX){
+				float temp_vdiv = (float)temp_set_vdiv / 10.0;
+				EEPROM_Write_V_CAL_ALT(temp_vdiv);
+				printPGMStr(STR_VCAL);
+				fprintf(&USBSerialStream, "%.1f", temp_vdiv);
+				return;
+			}
 		}
 	}
 	// SETICAL - Set the current calibration for a given port and store in EEPROM to 
@@ -529,6 +529,38 @@ static inline void INPUT_Parse(void) {
 			}
 		}
 	}
+	// SETBUS - Set ports to be referenced to the Main bus to correct power readings and voltage control
+	if (strncasecmp_P(DATA_IN, STR_Command_SETBUS, 6) == 0) {
+		char * str = DATA_IN + 6;
+		uint8_t setting = 255;
+		if (strncasecmp_P(str, STR_MAIN, 4) == 0) {
+			setting = 0;
+		}
+		if (strncasecmp_P(str, STR_ALT, 3) == 0) {
+			setting = 1;
+		}
+		if (setting <= 1) {
+			INPUT_Parse_args(&pd, (setting ? DATA_IN+10 : DATA_IN+9));
+			for (uint8_t i = 0; i < PORT_CNT; i++) {
+				if (pd & (1 << i)) {
+					if (setting == 1) {
+						PORT_BOOT_STATE[i] |= 0b00000100;
+						PORT_STATE[i] |= 0b00010000;
+					} else {
+						PORT_BOOT_STATE[i] &= 0b11111011;
+						PORT_STATE[i] &= 0b11101111;
+					}
+					EEPROM_Write_Port_Boot_State(i, PORT_BOOT_STATE[i]);
+					
+					fprintf(&USBSerialStream, "\r\n");
+					printPGMStr(STR_Command_SETBUS);
+					fprintf(&USBSerialStream, " %i ", i+1);
+					printPGMStr(setting ? STR_ALT : STR_MAIN);
+				}
+			}
+			return;
+		}
+	}
 	
 	// If none of the above commands were recognized, print a generic error.
 	printPGMStr(STR_Unrecognized);
@@ -540,7 +572,7 @@ static inline void INPUT_Parse(void) {
 
 // Print a summary of all ports status'
 static inline void PRINT_Status(void) {
-	float main_voltage, alt_voltage, current;
+	float main_voltage, alt_voltage, current, power;
 	
 	// Voltage
 	main_voltage = ADC_Read_Main_Voltage();
@@ -573,7 +605,12 @@ static inline void PRINT_Status(void) {
 		fprintf(&USBSerialStream, "%.2fA ", current);
 		// Power reading
 		printPGMStr(PSTR("Power: "));
-		fprintf(&USBSerialStream, "%.1fW", (main_voltage * current));
+		if (PORT_STATE[i] &= 0b00010000) {
+			power = alt_voltage * current;
+		} else {
+			power = main_voltage * current;
+		}
+		fprintf(&USBSerialStream, "%.1fW", power);
 		
 		// Overload?
 		if (PORT_STATE[i] & 0b00000010) { printPGMStr(STR_Overload); }
@@ -588,6 +625,7 @@ static inline void PRINT_Status_Prog(void){
 	char temp_name[16];
 	float main_voltage = ADC_Read_Main_Voltage();
 	float alt_voltage = ADC_Read_Alt_Voltage();
+	float power;
 	
 	// Device Description,Software version,Unit Name
 	EEPROM_Read_Port_Name(-1, temp_name); //PDU Name
@@ -606,7 +644,11 @@ static inline void PRINT_Status_Prog(void){
 		uint8_t port_vctl = (PORT_STATE[i] & 0b00000100) >> 2;
 		
 		float current = ADC_Read_Port_Current(i);
-		float power = current * main_voltage;
+		if (PORT_STATE[i] &= 0b00010000) {
+			power = alt_voltage * current;
+		} else {
+			power = main_voltage * current;
+		}
 		
 		fprintf(&USBSerialStream, "\r\n%i,%s,%i,%.2f,%.1f,%i,%i", i+1, temp_name, port_state, \
 			current, power, port_overload, port_vctl);
@@ -737,11 +779,16 @@ static inline uint8_t PORT_Check_Current_Limit(uint8_t port){
 // Checks the disable voltage setting for each port and disables the port if it has fallen 
 // below the cutoff threshold, and re-enables if it is above the cuton threshold.
 static inline void Check_Voltage_Cutoff(void){
-	float voltage = ADC_Read_Main_Voltage();
+	float voltage;
 	
 	for (uint8_t i = 0; i < PORT_CNT; i++) {
 		if ((PORT_STATE[i] & 0b00000100) > 0) {
-			// 
+			// Check the voltage as appropriate for the bus this port is on.
+			if (PORT_STATE[i] &= 0b00010000) {
+				voltage = ADC_Read_Alt_Voltage();
+			} else {
+				voltage = ADC_Read_Main_Voltage();
+			}
 			if ((voltage < EEPROM_Read_Port_CutOff(i) && (PORT_STATE[i] & 0b00000001)) || (voltage > EEPROM_Read_Port_CutOn(i) && !(PORT_STATE[i] & 0b00000001))) {
 				// Check if this is the second time through, if so, disable the port.
 				// If it's the first time through, set the VCTL changing bit
