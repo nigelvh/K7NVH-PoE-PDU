@@ -573,23 +573,29 @@ static inline void PRINT_Status(void) {
 		// Number and Name
 		char temp_name[16];
 		EEPROM_Read_Port_Name(i, temp_name);
-		fprintf(&USBSerialStream, "%i \"%s\": ", i+1, temp_name);
+		fprintf(&USBSerialStream, "%i\t\"%s\":\t", i+1, temp_name);
 		
 		// Enabled/Disabled
 		if (PORT_STATE[i] & 0b00000001) { printPGMStr(STR_Enabled); } else { printPGMStr(STR_Disabled); }
 		
 		// Current reading
 		current = ADC_Read_Port_Current(i);
-		printPGMStr(PSTR(" Current: "));
-		fprintf(&USBSerialStream, "%.2fA ", current);
+		printPGMStr(PSTR("\t\tCurrent: "));
+		fprintf(&USBSerialStream, "%.2fA", current);
 		// Power reading
-		printPGMStr(PSTR("Power: "));
+		printPGMStr(PSTR("\tPower: "));
 		if (PORT_STATE[i] & 0b00010000) {
 			power = alt_voltage * current;
 		} else {
 			power = main_voltage * current;
 		}
-		fprintf(&USBSerialStream, "%.1fW", power);
+		fprintf(&USBSerialStream, "%.1fW (", power);
+		if (PORT_STATE[i] & 0b00010000) {
+			printPGMStr(STR_ALT);
+		} else {
+			printPGMStr(STR_MAIN);
+		}
+		fprintf(&USBSerialStream, " BUS)\t");
 		
 		// Overload?
 		if (PORT_STATE[i] & 0b00000010) { printPGMStr(STR_Overload); }
@@ -614,13 +620,14 @@ static inline void PRINT_Status_Prog(void){
 	// Input Voltage,Temperature
 	fprintf(&USBSerialStream, "\r\n%.2f,%.2f,%d", main_voltage, alt_voltage, ADC_Read_Temperature());
 	
-	// Port Number,Port Name,Enabled?,Current,Power,Overload
+	// Port Number,Port Name,Enabled?,Current,Power,Overload,AltBus?
 	for (uint8_t i = 0; i < PORT_CNT; i++) {
 		EEPROM_Read_Port_Name(i, temp_name);
 		
 		uint8_t port_state = (PORT_STATE[i] & 0b00000001);
 		uint8_t port_overload = (PORT_STATE[i] & 0b00000010) >> 1;
 		uint8_t port_vctl = (PORT_STATE[i] & 0b00000100) >> 2;
+		uint8_t port_altbus = (PORT_STATE[i] & 0b00010000) >> 4;
 		
 		float current = ADC_Read_Port_Current(i);
 		if (PORT_STATE[i] & 0b00010000) {
@@ -629,8 +636,8 @@ static inline void PRINT_Status_Prog(void){
 			power = main_voltage * current;
 		}
 		
-		fprintf(&USBSerialStream, "\r\n%i,%s,%i,%.2f,%.1f,%i,%i", i+1, temp_name, port_state, \
-			current, power, port_overload, port_vctl);
+		fprintf(&USBSerialStream, "\r\n%i,%s,%i,%.2f,%.1f,%i,%i,%i", i+1, temp_name, port_state, \
+			current, power, port_overload, port_vctl, port_altbus);
 	}
 }
 
