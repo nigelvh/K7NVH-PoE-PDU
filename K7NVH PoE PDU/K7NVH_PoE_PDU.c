@@ -230,7 +230,7 @@ static inline int8_t INPUT_Parse_port() {
 	int8_t temp = 0;
 	
 	while (*DATA_IN != 0) {
-		fprintf(&USBSerialStream, "\r\n%s", DATA_IN);
+		if (*DATA_IN == 'P' || *DATA_IN == 'p') { DATA_IN++; return 'P'; }
 		if (*DATA_IN >= '0' && *DATA_IN <= '9') {
 			if (temp > 0) temp = temp * 10;
 			temp = temp + (*DATA_IN - '0');
@@ -406,51 +406,23 @@ static inline void INPUT_Parse(void) {
 	}
 	// SETNAME - Set the name for a given port.
 	if (strncasecmp_P(DATA_IN, STR_Command_SETNAME, 7) == 0) {
-		//char *str = DATA_IN + 7;
 		int8_t portid;
 		char temp_name[16];
 
-
-		//char *str = DATA_IN + 7;
-		fprintf(&USBSerialStream, "\r\n%s", DATA_IN);
-		portid = INPUT_Parse_port();
-		fprintf(&USBSerialStream, "\r\n%s - PORT: %i", DATA_IN, portid);
+		DATA_IN += 7;
+		portid = INPUT_Parse_port();		
+		while (*DATA_IN == ' ' || *DATA_IN == '\t') DATA_IN++;
 		
-/*		
-		if (portid > 0) {
-			EEPROM_Write_Port_Name(portid - 1, str);
+		if (portid > 0 && portid <= 12) {
+			EEPROM_Write_Port_Name(portid - 1, DATA_IN);
 			printPGMStr(STR_NR_Port);
 			EEPROM_Read_Port_Name(portid - 1, temp_name);
 			fprintf(&USBSerialStream, "%i NAME: %s", portid, temp_name);
 			return;
-		} else if (portid == 0) {
-			EEPROM_Write_Port_Name(-1, str);
+		} else if (portid == 'P') {
+			EEPROM_Write_Port_Name(-1, DATA_IN);
 			return;
 		}
-
-		while (*str == ' ' || *str == '\t') str++;
-		if (*str >= '1' && *str <= '8') {
-			portid = *str - '1';
-			
-			str++;
-			while (*str == ' ' || *str == '\t') str++;
-
-			EEPROM_Write_Port_Name(portid, str);
-			
-			printPGMStr(STR_NR_Port);
-			EEPROM_Read_Port_Name(portid, temp_name);
-			fprintf(&USBSerialStream, "%i NAME: %s", portid + 1, temp_name);
-			return;
-		} else if (*str == 'P') {
-			portid = -1;
-			
-			str++;
-			while (*str == ' ' || *str == '\t') str++;
-
-			EEPROM_Write_Port_Name(portid, str);
-			return;
-		}
-*/
 	}
 	// SETLIMIT - Set the current limit for a given port.
 	if (strncasecmp_P(DATA_IN, STR_Command_SETLIMIT, 8) == 0) {
@@ -599,7 +571,7 @@ static inline void PRINT_Status(void) {
 		fprintf(&USBSerialStream, "%.2fA ", current);
 		// Power reading
 		printPGMStr(PSTR("Power: "));
-		if (PORT_STATE[i] &= 0b00010000) {
+		if (PORT_STATE[i] & 0b00010000) {
 			power = alt_voltage * current;
 		} else {
 			power = main_voltage * current;
@@ -638,7 +610,7 @@ static inline void PRINT_Status_Prog(void){
 		uint8_t port_vctl = (PORT_STATE[i] & 0b00000100) >> 2;
 		
 		float current = ADC_Read_Port_Current(i);
-		if (PORT_STATE[i] &= 0b00010000) {
+		if (PORT_STATE[i] & 0b00010000) {
 			power = alt_voltage * current;
 		} else {
 			power = main_voltage * current;
@@ -912,8 +884,9 @@ static inline void EEPROM_Read_Port_Name(int8_t port, char *str) {
 static inline void EEPROM_Write_Port_Name(int8_t port, char *str) {
 	// While we haven't reached the end of the string, or reached the end of the buffer
 	// Write the name bytes to EEPROM
+	for (uint8_t i = 0; i < 15; i++) { eeprom_update_byte((uint8_t*)(EEPROM_OFFSET_P0NAME+(port*16)+i), 0); }
 	for (uint8_t i = 0; i < 15; i++) {
-		//if (*str == 0) { break; }
+		if (*str == 0) { break; }
 		eeprom_update_byte((uint8_t*)(EEPROM_OFFSET_P0NAME+(port*16)+i), *str);
 		str++;
 	}
