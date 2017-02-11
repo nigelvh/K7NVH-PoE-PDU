@@ -426,17 +426,16 @@ static inline void INPUT_Parse(void) {
 	}
 	// SETLIMIT - Set the current limit for a given port.
 	if (strncasecmp_P(DATA_IN, STR_Command_SETLIMIT, 8) == 0) {
-		char *str = DATA_IN + 8;
+		DATA_IN += 8;
 		uint8_t portid;
 		
-		while (*str == ' ' || *str == '\t') str++;
-		if (*str >= '1' && *str <= '8') {
-			portid = *str - '1';
-			str++;
+		portid = INPUT_Parse_port();
+		while (*DATA_IN == ' ' || *DATA_IN == '\t') DATA_IN++;
 		
-			uint16_t temp_set_limit = (atoi(str) / 100);
+		if (portid > 0 && portid <= 12) {
+			uint16_t temp_set_limit = (atoi(DATA_IN) / 100);
 			if (temp_set_limit <= LIMIT_MAX){
-				EEPROM_Write_Port_Limit(portid, temp_set_limit);
+				EEPROM_Write_Port_Limit((portid - 1), temp_set_limit);
 				printPGMStr(STR_Port_Limit);
 				fprintf(&USBSerialStream, "%.1fA", (float)temp_set_limit/10);
 				return;
@@ -445,7 +444,8 @@ static inline void INPUT_Parse(void) {
 	}
 	// SETVREF - Set the VREF voltage and store in EEPROM to correct voltage readings.
 	if (strncasecmp_P(DATA_IN, STR_Command_SETVREF, 7) == 0) {
-		uint16_t temp_set_vref = atoi(DATA_IN + 7);
+		DATA_IN += 7;
+		uint16_t temp_set_vref = atoi(DATA_IN);
 		if (temp_set_vref >= VREF_MIN && temp_set_vref <= VREF_MAX){
 			float temp_vref = (float)temp_set_vref / 1000.0;
 			EEPROM_Write_REF_V(temp_vref);
