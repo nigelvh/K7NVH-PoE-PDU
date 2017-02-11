@@ -484,17 +484,16 @@ static inline void INPUT_Parse(void) {
 	// SETICAL - Set the current calibration for a given port and store in EEPROM to 
 	// correct current readings.
 	if (strncasecmp_P(DATA_IN, STR_Command_SETICAL, 7) == 0) {
-		char *str = DATA_IN + 7;
+		DATA_IN += 7;
 		uint8_t portid;
 		
-		while (*str == ' ' || *str == '\t') str++;
-		if (*str >= '1' && *str <= '8') {
-			portid = *str - '1';
-			str++;
+		portid = INPUT_Parse_port();
+		while (*DATA_IN == ' ' || *DATA_IN == '\t') DATA_IN++;
 		
-			uint16_t temp_i_cal = atoi(str);
+		if (portid > 0 && portid <= 12) {
+			uint16_t temp_i_cal = atoi(DATA_IN);
 			if (temp_i_cal >= ICAL_MIN && temp_i_cal <= ICAL_MAX){
-				EEPROM_Write_I_CAL(portid, (float)(temp_i_cal / 10.0));
+				EEPROM_Write_I_CAL((portid - 1), (float)(temp_i_cal / 10.0));
 				printPGMStr(STR_ICAL);
 				fprintf(&USBSerialStream, "%.1f", (float)(temp_i_cal / 10.0));
 				return;
@@ -968,7 +967,7 @@ static inline void DEBUG_Dump(void) {
 	// Read I_CAL
 	printPGMStr(STR_ICAL);
 	for (uint8_t i = 0; i < PORT_CNT; i++) {
-		fprintf(&USBSerialStream, "%i:%.1f ", eeprom_read_word((uint16_t*)(EEPROM_OFFSET_I_CAL + i)), EEPROM_Read_I_CAL(i));
+		fprintf(&USBSerialStream, "%i:%.1f ", eeprom_read_word((uint16_t*)(EEPROM_OFFSET_I_CAL + (i*2))), EEPROM_Read_I_CAL(i));
 	}
 	
 	// Read Port Cycle Time
