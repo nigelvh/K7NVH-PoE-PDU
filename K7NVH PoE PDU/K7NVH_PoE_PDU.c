@@ -373,29 +373,27 @@ static inline void INPUT_Parse(void) {
 	}
 	// SETVCTL - Set ON/OFF Voltages for Voltage Control
 	if (strncasecmp_P(DATA_IN, STR_Command_SETVCTL, 7) == 0) {
-		char *str = DATA_IN + 7;
+		DATA_IN += 7;
 		int8_t portid;
 		uint8_t setting = 255;
-		if (strncasecmp_P(str, PSTR("ON"), 2) == 0) {
+		if (strncasecmp_P(DATA_IN, PSTR("ON"), 2) == 0) {
 			setting = 1;
-			str += 2;
+			DATA_IN += 2;
 		}
-		if (strncasecmp_P(str, PSTR("OFF"), 3) == 0) {
+		if (strncasecmp_P(DATA_IN, PSTR("OFF"), 3) == 0) {
 			setting = 0;
-			str += 3;
+			DATA_IN += 3;
 		}
 		if (setting <= 1) {
-			while (*str == ' ' || *str == '\t') str++;
-			if (*str >= '1' && *str <= '8') {
-				portid = *str - '1';
-				str++;
-				
-				uint16_t temp_set_voltage = atoi(str);
+			portid = INPUT_Parse_port();
+			while (*DATA_IN == ' ' || *DATA_IN == '\t') DATA_IN++;
+			if (portid > 0 && portid <= 12) {
+				uint16_t temp_set_voltage = atoi(DATA_IN);
 				if ((float)(temp_set_voltage/100) <= VMAX){
 					if (setting == 1) {
-						EEPROM_Write_Port_CutOn(portid, temp_set_voltage);
+						EEPROM_Write_Port_CutOn((portid - 1), temp_set_voltage);
 					} else {
-						EEPROM_Write_Port_CutOff(portid, temp_set_voltage);
+						EEPROM_Write_Port_CutOff((portid - 1), temp_set_voltage);
 					}
 					printPGMStr(STR_Port_VCTL);
 					fprintf(&USBSerialStream, "%.2fV", (float)temp_set_voltage/100);
