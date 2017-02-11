@@ -11,28 +11,29 @@ The device is available to the host system as a USB serial device, which when ac
 
 This repository contains the source code to be compiled with AVR-GCC, and uploaded to the device via ATMEL's FLIP programmer or the dfu-programmer utility.
 
-WORK IN PROGRESS
-=======
-
 ## Supported Commands
 ### HELP
 The 'HELP' command will print a short message referencing the project page containing documentation.
 
 ### STATUS
-The 'STATUS' command is designed to give an overview of the running state of each port on the PDU. The port numbers, any configured custom port names, and port state (ENABLED/DISABLED) will be displayed. Input voltage, board temperature, and per port current and power values will be shown. Voltages sensed on the auxiliary inputs will also be displayed. Note that unconnected auxiliary inputs may float and show voltages on unconnected pins. Messages that ports have been disabled due to overload, or are under automatic voltage control are displayed if applicable.
+The 'STATUS' command is designed to give an overview of the running state of each port on the PDU. The port numbers, any configured custom port names, and port state (ENABLED/DISABLED) will be displayed. Input voltage, board temperature, and per port current and power values will be shown. Messages that ports have been disabled due to overload, or are under automatic voltage control are displayed if applicable. Note that power values are calculated based on the bus voltage. You will need to set which bus ports are physically connected to for accurate power readings.
 
 ```plain
 > STATUS
-Voltage: 13.76V Temperature: 25C
-PORT 1 "": ENABLED Current: 0.00A Power: 0.0W 
-PORT 2 "": ENABLED Current: 0.00A Power: 0.0W 
-PORT 3 "": ENABLED Current: 0.00A Power: 0.0W 
-PORT 4 "": ENABLED Current: 0.00A Power: 0.0W 
-PORT 5 "": ENABLED Current: 0.00A Power: 0.0W 
-PORT 6 "": ENABLED Current: 0.00A Power: 0.0W 
-PORT 7 "": ENABLED Current: 0.00A Power: 0.0W 
-PORT 8 "": ENABLED Current: 0.00A Power: 0.0W 
-AUX 1:0.01V 2:0.04V 3:0.01V 4:0.02V 5:0.03V 6:0.00V
+Main Voltage: 24.12V
+Alt Voltage: 12.24V     Temperature: 29C
+PORT 1  "Port 1":       ENABLED         Current: 0.00A  Power: 0.0W (MAIN BUS)  
+PORT 2  "Port 2":       ENABLED         Current: 0.04A  Power: 0.9W (MAIN BUS)  
+PORT 3  "Port 3":       ENABLED         Current: 0.01A  Power: 0.2W (MAIN BUS)  
+PORT 4  "Port 4":       ENABLED         Current: 0.00A  Power: 0.1W (MAIN BUS)  
+PORT 5  "Port 5":       ENABLED         Current: 0.02A  Power: 0.4W (MAIN BUS)  
+PORT 6  "Port 6":       ENABLED         Current: 0.03A  Power: 0.8W (MAIN BUS)  
+PORT 7  "Port 7":       ENABLED         Current: 0.02A  Power: 0.5W (MAIN BUS)  
+PORT 8  "Port 8":       ENABLED         Current: 0.00A  Power: 0.1W (MAIN BUS)  
+PORT 9  "Port 9":       ENABLED         Current: 0.05A  Power: 1.1W (MAIN BUS)  
+PORT 10 "Port 10":      ENABLED         Current: 0.00A  Power: 0.1W (MAIN BUS)  
+PORT 11 "Port 11":      ENABLED         Current: 0.00A  Power: 0.0W (MAIN BUS)  
+PORT 12 "Port 12":      ENABLED         Current: 0.00A  Power: 0.1W (MAIN BUS) 
 ```
 
 ### PSTATUS
@@ -40,25 +41,27 @@ The 'PSTATUS' command is designed to give an overview of the running state of th
 
 ```plain
 K7NVH DC PDU,Version Number,Device Name
-Input Voltage,Board Temperature
-AIN1,AIN2,AIN3,AIN4,AIN5,AIN6
-Port Number,Port Name,Binary Enabled/Disabled Flag,Port Current,Port Power,Binary Overload Flag,Automatic Voltage Control Flag
+MAIN Bus Input Voltage, ALT Bus Input Voltage, CPU Temperature
+Port Number,Port Name,Binary Enabled/Disabled Flag,Port Current,Port Power,Binary Overload Flag,Automatic Voltage Control Flag,ALT Bus Flag (1 = ALT Bus, 0 = MAIN Bus)
 (The above line is repeated for each port)
 ```
 An example output might look like the following.
 ```plain
 > PSTATUS
-K7NVH DC PDU,1.1,
-2.15,23
-0.02,0.04,0.03,0.01,0.01,0.03
-0,,1,0.00,0.0,0,0
-1,,1,0.00,0.0,0,0
-2,,1,0.00,0.0,0,0
-3,,1,0.00,0.0,0,0
-4,,1,0.00,0.0,0,0
-5,,1,0.00,0.0,0,0
-6,,1,0.00,0.0,0,0
-7,Port 8,1,0.03,0.1,0,0
+K7NVH PoE PDU,1.0,PoE-PDU
+24.12,12.24,27
+1,Port 1,1,0.00,0.0,0,0,0
+2,Port 2,1,0.04,0.9,0,0,0
+3,Port 3,1,0.01,0.2,0,0,0
+4,Port 4,1,0.00,0.1,0,0,0
+5,Port 5,1,0.02,0.4,0,0,0
+6,Port 6,1,0.03,0.8,0,0,0
+7,Port 7,1,0.02,0.5,0,0,0
+8,Port 8,1,0.00,0.1,0,0,0
+9,Port 9,1,0.05,1.1,0,0,0
+10,Port 10,1,0.00,0.1,0,0,0
+11,Port 11,1,0.00,0.0,0,0,0
+12,Port 12,1,0.00,0.1,0,0,0
 ```
 
 ### PON
@@ -122,6 +125,8 @@ The PDU supports setting only one port limit at a time. The following is an exam
 ### VCTLON
 The 'VCTLON' command is used to enable the PDU to control a given port automatically based on the sensed input voltage. This setting is persistent across reboots of the PDU device. Automatic voltage control of a given port is disabled until manually enabled again, or the PDU is rebooted, in the case of any manual action controlling a port, or an overload condition disables a port.
 
+Note that voltage control acts based on the configured bus for the given port. You will need to set the proper bus to reference voltage control against with the SETBUSMAIN/SETBUSALT commands.
+
 The voltage thresholds for enabling and disabling a port are set with the 'SETVCTLON' and 'SETVCTLOFF' commands.
 
 Input voltage is polled approximately every 5 seconds, and ports will be enabled/disabled after two consecutive polling cycles have shown voltages beyond the configured thresholds.
@@ -140,6 +145,8 @@ The 'SETVCTLON' command is used to set the voltage, at which a port should be en
 
 'SETVCTLON' is set in units of hundredths of volts, and accepts values from 0 to 4000 (0 to 40 volts).
 
+Note that voltage control acts based on the configured bus for the given port. You will need to set the proper bus to reference voltage control against with the SETBUSMAIN/SETBUSALT commands.
+
 The PDU supports setting only one port enable threshold at a time. The following is an example of setting the enable threshold of Port 1 to 10 volts. `SETVCTLON 1 1000`
 
 ### SETVCTLOFF
@@ -156,19 +163,36 @@ The 'SETVREF' command is used only during calibration of the PDU. Measuring the 
 
 For example, to set the voltage reference calibration to 4.2V, the following are valid 'SETVREF' syntaxes. `SETVREF4200` `SETVREF 4200`
 
-### SETVCAL
-The 'SETVCAL' command is used only during calibration of the PDU. Measuring the voltage divider on the input port with an accurate voltage meter, calibration of voltage supply measurements can be made.
+### SETVCALMAIN
+The 'SETVCALMAIN' command is used only during calibration of the PDU. Measuring the voltage divider on the MAIN bus with an accurate voltage meter, calibration of MAIN bus voltage supply measurements can be made.
 
-'SETVCAL' is a unitless multiplier, specified in VALUE*10, and accepts values from 150 to 70 (15.0X to 7.0X). The default value if uncalibrated is the dividers's nominal voltage division of 11.0X.
+'SETVCALMAIN' is a unitless multiplier, specified in VALUE*10, and accepts values from 170 to 130 (17.0X to 13.0X). The default value if uncalibrated is the dividers's nominal voltage division of 15.0X.
 
-For example, to set the divider reference calibration to 11.0X, the following are valid 'SETVCAL' syntaxes. `SETVCAL110` `SETVCAL 110`
+For example, to set the divider reference calibration to 15.0X, the following are valid 'SETVCALMAIN' syntaxes. `SETVCALMAIN150` `SETVCALMAIN 150`
+
+### SETVCALALT
+The 'SETVCALALT' command is used only during calibration of the PDU. Measuring the voltage divider on the ALT bus with an accurate voltage meter, calibration of ALT bus voltage supply measurements can be made.
+
+'SETVCALALT' is a unitless multiplier, specified in VALUE*10, and accepts values from 170 to 130 (17.0X to 13.0X). The default value if uncalibrated is the dividers's nominal voltage division of 15.0X.
+
+For example, to set the divider reference calibration to 15.0X, the following are valid 'SETVCALALT' syntaxes. `SETVCALALT150` `SETVCALALT 150`
 
 ### SETICAL
-The 'SETICAL' command is used only during calibration of the PDU. Measuring the voltage divider on the current sense op amp for a given port with an accurate meter, calibration of current sense measurements can be made.
+The 'SETICAL' command is used only during calibration of the PDU. Measuring the gain on the current sensor for a given port with an accurate meter, calibration of current sense measurements can be made.
 
-'SETICAL' is a unitless multiplier, specified in VALUE*10, and accepts values from 160 to 60 (16.0X to 6.0X). The default value if uncalibrated is the dividers's nominal voltage division of 11.0X.
+'SETICAL' is a unitless multiplier, specified in VALUE*10, and accepts values from 480 to 520 (48.0X to 52.0X). The default value if uncalibrated is the nominal gain of 50.0X.
 
-For example, to set the calibration on port 1 to 11.0X, the following is valid 'SETICAL' syntax. `SETICAL 1 110`
+For example, to set the calibration on port 1 to 50.0X, the following is valid 'SETICAL' syntax. `SETICAL 1 500`
+
+### SETBUSMAIN
+The 'SETBUSMAIN' command is used to reference a given port against the MAIN bus voltage. This voltage reference is used in Power calculations, as well as in voltage control.
+
+The PDU supports setting multiple ports at a time to be referenced to the MAIN bus. 'A' can also be substituted for a port number to change all ports. `SETBUSMAIN 1` `SETBUSMAIN 1 2 3 4` `SETBUSMAIN A`
+
+### SETBUSALT
+The 'SETBUSALT' command is used to reference a given port against the ALT bus voltage. This voltage reference is used in Power calculations, as well as in voltage control.
+
+The PDU supports setting multiple ports at a time to be referenced to the ALT bus. 'A' can also be substituted for a port number to change all ports. `SETBUSALT 1` `SETBUSALT 1 2 3 4` `SETBUSALT A`
 
 ### DEBUG
 The 'DEBUG' command is useful for debugging PDU state. It will output a variety of values, and may not be formatted for easy understanding.
