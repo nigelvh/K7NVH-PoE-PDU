@@ -272,19 +272,22 @@ static inline void INPUT_Parse(void) {
 	}
 	// PON - Turn on a port or list of ports
 	if (strncasecmp_P(DATA_IN, STR_Command_PON, 3) == 0) {
-		INPUT_Parse_args(&pd, DATA_IN + 3);
+		DATA_IN += 3;
+		INPUT_Parse_args(&pd, DATA_IN);
 		PORT_Set_Ctl(&pd, 1);
 		return;
 	}
 	// POFF - Turn off a port or a list of ports
 	if (strncasecmp_P(DATA_IN, STR_Command_POFF, 4) == 0) {
-		INPUT_Parse_args(&pd, DATA_IN + 4);
+		DATA_IN += 4;
+		INPUT_Parse_args(&pd, DATA_IN);
 		PORT_Set_Ctl(&pd, 0);
 		return;
 	}
 	// PCYCLE - Power cycle a port or list of ports. Time is defined by EEPROM_Read_PCycle_Time().
 	if (strncasecmp_P(DATA_IN, STR_Command_PCYCLE, 6) == 0) {
-		INPUT_Parse_args(&pd, DATA_IN + 6);
+		DATA_IN += 6;
+		INPUT_Parse_args(&pd, DATA_IN);
 		
 		PORT_Set_Ctl(&pd, 0);
 
@@ -302,7 +305,8 @@ static inline void INPUT_Parse(void) {
 	}
 	// SETCYCLE - Set PCYCLE_TIME and store in EEPROM
 	if (strncasecmp_P(DATA_IN, STR_Command_SETCYCLE, 8) == 0) {
-		uint16_t temp_set_time = atoi(DATA_IN + 8);
+		DATA_IN += 8;
+		uint16_t temp_set_time = atoi(DATA_IN);
 		if (temp_set_time <= PCYCLE_MAX_TIME) {
 			printPGMStr(STR_PCYCLE_Time);
 			fprintf(&USBSerialStream, "%i", temp_set_time);
@@ -312,16 +316,18 @@ static inline void INPUT_Parse(void) {
 	}
 	// SETDEF - Set the port default state
 	if (strncasecmp_P(DATA_IN, STR_Command_SETDEF, 6) == 0) {
-		char *str = DATA_IN + 6;
+		DATA_IN += 6;
 		uint8_t state = 255;
-		if (strncasecmp_P(str, PSTR("ON"), 2) == 0) {
+		if (strncasecmp_P(DATA_IN, PSTR("ON"), 2) == 0) {
 			state = 1;
+			DATA_IN += 2;
 		}
-		if (strncasecmp_P(str, PSTR("OFF"), 3) == 0) {
+		if (strncasecmp_P(DATA_IN, PSTR("OFF"), 3) == 0) {
 			state = 0;
+			DATA_IN += 3;
 		}
 		if (state <= 1) {
-			INPUT_Parse_args(&pd, (state ? DATA_IN+8 : DATA_IN+9));
+			INPUT_Parse_args(&pd, DATA_IN);
 			for (uint8_t i = 0; i < PORT_CNT; i++) {
 				if (pd & (1 << i)) {
 					if (state == 1) {
@@ -341,16 +347,18 @@ static inline void INPUT_Parse(void) {
 	}
 	// VCTL - Enable/Disable Voltage Control
 	if (strncasecmp_P(DATA_IN, STR_Command_VCTL, 4) == 0) {
-		char *str = DATA_IN + 4;
+		DATA_IN += 4;
 		uint8_t setting = 255;
-		if (strncasecmp_P(str, PSTR("ON"), 2) == 0) {
+		if (strncasecmp_P(DATA_IN, PSTR("ON"), 2) == 0) {
 			setting = 1;
+			DATA_IN += 2;
 		}
-		if (strncasecmp_P(str, PSTR("OFF"), 3) == 0) {
+		if (strncasecmp_P(DATA_IN, PSTR("OFF"), 3) == 0) {
 			setting = 0;
+			DATA_IN += 3;
 		}
 		if (setting <= 1) {
-			INPUT_Parse_args(&pd, (setting ? DATA_IN+6 : DATA_IN+7));
+			INPUT_Parse_args(&pd, DATA_IN);
 			for (uint8_t i = 0; i < PORT_CNT; i++) {
 				if (pd & (1 << i)) {
 					if (setting == 1) {
