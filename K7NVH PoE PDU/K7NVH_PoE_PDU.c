@@ -387,7 +387,7 @@ static inline void INPUT_Parse(void) {
 		if (setting <= 1) {
 			portid = INPUT_Parse_port();
 			while (*DATA_IN == ' ' || *DATA_IN == '\t') DATA_IN++;
-			if (portid > 0 && portid <= 12) {
+			if (portid > 0 && portid <= PORT_CNT) {
 				uint16_t temp_set_voltage = atoi(DATA_IN);
 				if ((float)(temp_set_voltage/100) <= VMAX){
 					if (setting == 1) {
@@ -411,7 +411,7 @@ static inline void INPUT_Parse(void) {
 		portid = INPUT_Parse_port();		
 		while (*DATA_IN == ' ' || *DATA_IN == '\t') DATA_IN++;
 		
-		if (portid > 0 && portid <= 12) {
+		if (portid > 0 && portid <= PORT_CNT) {
 			EEPROM_Write_Port_Name(portid - 1, DATA_IN);
 			printPGMStr(STR_NR_Port);
 			EEPROM_Read_Port_Name(portid - 1, temp_name);
@@ -430,7 +430,7 @@ static inline void INPUT_Parse(void) {
 		portid = INPUT_Parse_port();
 		while (*DATA_IN == ' ' || *DATA_IN == '\t') DATA_IN++;
 		
-		if (portid > 0 && portid <= 12) {
+		if (portid > 0 && portid <= PORT_CNT) {
 			uint16_t temp_set_limit = (atoi(DATA_IN) / 100);
 			if (temp_set_limit <= LIMIT_MAX){
 				EEPROM_Write_Port_Limit((portid - 1), temp_set_limit);
@@ -488,7 +488,7 @@ static inline void INPUT_Parse(void) {
 		portid = INPUT_Parse_port();
 		while (*DATA_IN == ' ' || *DATA_IN == '\t') DATA_IN++;
 		
-		if (portid > 0 && portid <= 12) {
+		if (portid > 0 && portid <= PORT_CNT) {
 			uint16_t temp_i_cal = atoi(DATA_IN);
 			if (temp_i_cal >= ICAL_MIN && temp_i_cal <= ICAL_MAX){
 				EEPROM_Write_I_CAL((portid - 1), (float)(temp_i_cal / 10.0));
