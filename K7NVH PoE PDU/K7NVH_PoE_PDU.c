@@ -456,19 +456,25 @@ static inline void INPUT_Parse(void) {
 	}
 	// SETVCAL - Set the ALT bus VCAL and store in EEPROM to correct voltage readings.
 	if (strncasecmp_P(DATA_IN, STR_Command_SETVCAL, 7) == 0) {
-		char * str = DATA_IN + 7;
+		DATA_IN += 7;
 		uint8_t setting = 255;
-		if (strncasecmp_P(str, STR_MAIN, 4) == 0) {
+		if (strncasecmp_P(DATA_IN, STR_MAIN, 4) == 0) {
 			setting = 0;
+			DATA_IN += 4;
 		}
-		if (strncasecmp_P(str, STR_ALT, 3) == 0) {
+		if (strncasecmp_P(DATA_IN, STR_ALT, 3) == 0) {
 			setting = 1;
+			DATA_IN += 3;
 		}
 		if (setting <= 1) {
-			uint16_t temp_set_vdiv = atoi((setting ? DATA_IN+11 : DATA_IN+10));
+			uint16_t temp_set_vdiv = atoi(DATA_IN);
 			if (temp_set_vdiv >= VCAL_MIN && temp_set_vdiv <= VCAL_MAX){
 				float temp_vdiv = (float)temp_set_vdiv / 10.0;
-				EEPROM_Write_V_CAL_ALT(temp_vdiv);
+				if (setting == 0) {
+					EEPROM_Write_V_CAL_MAIN(temp_vdiv);
+				} else {
+					EEPROM_Write_V_CAL_ALT(temp_vdiv);
+				}
 				printPGMStr(STR_VCAL);
 				fprintf(&USBSerialStream, "%.1f", temp_vdiv);
 				return;
@@ -497,16 +503,18 @@ static inline void INPUT_Parse(void) {
 	}
 	// SETBUS - Set ports to be referenced to the Main bus to correct power readings and voltage control
 	if (strncasecmp_P(DATA_IN, STR_Command_SETBUS, 6) == 0) {
-		char * str = DATA_IN + 6;
+		DATA_IN += 6;
 		uint8_t setting = 255;
-		if (strncasecmp_P(str, STR_MAIN, 4) == 0) {
+		if (strncasecmp_P(DATA_IN, STR_MAIN, 4) == 0) {
 			setting = 0;
+			DATA_IN += 4;
 		}
-		if (strncasecmp_P(str, STR_ALT, 3) == 0) {
+		if (strncasecmp_P(DATA_IN, STR_ALT, 3) == 0) {
 			setting = 1;
+			DATA_IN += 3;
 		}
 		if (setting <= 1) {
-			INPUT_Parse_args(&pd, (setting ? DATA_IN+10 : DATA_IN+9));
+			INPUT_Parse_args(&pd, DATA_IN);
 			for (uint8_t i = 0; i < PORT_CNT; i++) {
 				if (pd & (1 << i)) {
 					if (setting == 1) {
