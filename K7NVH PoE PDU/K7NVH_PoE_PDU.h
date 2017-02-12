@@ -95,11 +95,12 @@
 #define PCYCLE_MAX_TIME 30 // Seconds
 #define VREF_MAX 4300 // 4.3V * 1000
 #define VREF_MIN 4100 // 4.1V * 1000
-#define VCAL_MAX 170 // 17.0
-#define VCAL_MIN 130 // 13.0
+#define VCAL_MAX 170 // 17.0x
+#define VCAL_MIN 130 // 13.0x
 #define LIMIT_MAX 100 // Stored as amps*10 so 50==5.0A
-#define ICAL_MAX 520 // 52
-#define ICAL_MIN 480 // 48
+#define ICAL_MAX 520 // 52x
+#define ICAL_MIN 480 // 48x
+#define OFFSET_MAX 100 // Raw ADC counts
 #define VMAX 50
 
 // Timing
@@ -111,6 +112,7 @@
 #define EEPROM_OFFSET_PORT_DEFAULTS 0 // 16 bytes at offset 0
 #define EEPROM_OFFSET_CYCLE_TIME 16 // 1 byte at offset 17
 // Calibration values
+#define EEPROM_OFFSET_I_OFFSET 142 // 12 bytes - ADC counts of the current sense offset
 #define EEPROM_OFFSET_REF_V 154 // 4 bytes - Calibrate the ADC reference voltage
 #define EEPROM_OFFSET_V_CAL_MAIN 158 // 1 byte - Calibrate the main bus voltage sense divider
 #define EEPROM_OFFSET_V_CAL_ALT 159 // 1 byte - Calibrate the alt bus voltage sense divider
@@ -196,6 +198,7 @@ const char STR_VCAL[] PROGMEM = "\r\nVCAL: ";
 const char STR_ICAL[] PROGMEM = "\r\nICAL: ";
 const char STR_MAIN[] PROGMEM = "MAIN";
 const char STR_ALT[] PROGMEM = "ALT";
+const char STR_OFFSET[] PROGMEM = "\r\nOFFSET: ";
 
 // Command strings
 const char STR_Command_HELP[] PROGMEM = "HELP";
@@ -215,6 +218,7 @@ const char STR_Command_SETLIMIT[] PROGMEM = "SETLIMIT";
 const char STR_Command_VCTL[] PROGMEM = "VCTL";
 const char STR_Command_SETVCTL[] PROGMEM = "SETVCTL";
 const char STR_Command_SETBUS[] PROGMEM = "SETBUS";
+const char STR_Command_SETOFFSET[] PROGMEM = "SETOFFSET";
 
 // Port to pin lookup table
 const uint8_t Ports_Pins[PORT_CNT] = \
@@ -310,6 +314,8 @@ static inline float EEPROM_Read_Port_CutOff(uint8_t port);
 static inline void EEPROM_Write_Port_CutOff(uint8_t port, uint16_t cutoff);
 static inline float EEPROM_Read_Port_CutOn(uint8_t port);
 static inline void EEPROM_Write_Port_CutOn(uint8_t port, uint16_t cuton);
+static inline uint8_t EEPROM_Read_I_Offset(uint8_t port);
+static inline void EEPROM_Write_I_Offset(uint8_t port, uint8_t offset);
 static inline void EEPROM_Reset(void);
 
 // DEBUG

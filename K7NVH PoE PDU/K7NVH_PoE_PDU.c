@@ -6,8 +6,6 @@
 // Watchdog - Problem exists where reset dumps into DFU, and waits there.
 // Up/down arrow keys?
 
-// Add port calibration (read offset while ports are off)
-
 #include "K7NVH_PoE_PDU.h"
 
 ISR(WDT_vect){
@@ -535,6 +533,23 @@ static inline void INPUT_Parse(void) {
 			return;
 		}
 	}
+	// SETOFFSET - Store the ADC count offset for the current sensor, port should be on and disconnected.
+	if (strncasecmp_P(DATA_IN, STR_Command_SETOFFSET, 9) == 0) {
+		DATA_IN += 9;
+		
+		uint8_t portid = INPUT_Parse_port();
+		while (*DATA_IN == ' ' || *DATA_IN == '\t') DATA_IN++;
+		
+		if (portid > 0 && portid <= PORT_CNT) {
+			uint8_t temp_offset = atoi(DATA_IN);
+			if (temp_offset <= OFFSET_MAX) {
+				EEPROM_Write_I_Offset((portid - 1), temp_offset);
+				printPGMStr(STR_OFFSET);
+				fprintf(&USBSerialStream, "%i", temp_offset);
+				return;
+			}
+		}
+	}
 	
 	// If none of the above commands were recognized, print a generic error.
 	printPGMStr(STR_Unrecognized);
@@ -925,7 +940,6 @@ static inline float EEPROM_Read_Port_CutOff(uint8_t port) {
 	if (cutoff > VMAX) { cutoff = 0; }
 	return cutoff;
 }
-
 // Stored as (int)cutoff*100
 static inline void EEPROM_Write_Port_CutOff(uint8_t port, uint16_t cutoff) {
 	eeprom_update_word((uint16_t*)(EEPROM_OFFSET_V_CUTOFF+(port*2)), cutoff);
@@ -937,10 +951,20 @@ static inline float EEPROM_Read_Port_CutOn(uint8_t port) {
 	if (cuton > VMAX) { cuton = VMAX; }
 	return cuton;
 }
-
 // Stored as (int)cuton*100
 static inline void EEPROM_Write_Port_CutOn(uint8_t port, uint16_t cuton) {
 	eeprom_update_word((uint16_t*)(EEPROM_OFFSET_V_CUTON+(port*2)), cuton);
+}
+
+// Reads the ADC offset for the port current sense from EEPROM. Raw ADC counts.
+static inline uint8_t EEPROM_Read_I_Offset(uint8_t port) {
+	uint8_t offset = eeprom_read_byte((uint8_t*)(EEPROM_OFFSET_I_OFFSET+(port)));
+	if (offset > OFFSET_MAX) { offset = 0; }
+	return offset;
+}
+// Stored as raw ADC counts.
+static inline void EEPROM_Write_I_Offset(uint8_t port, uint8_t offset) {
+	eeprom_update_byte((uint16_t*)(EEPROM_OFFSET_I_OFFSET+(port)), offset);
 }
 
 // Reset all EEPROM values to 255
@@ -976,6 +1000,11 @@ static inline void DEBUG_Dump(void) {
 	printPGMStr(STR_ICAL);
 	for (uint8_t i = 0; i < PORT_CNT; i++) {
 		fprintf(&USBSerialStream, "%i:%.1f ", eeprom_read_word((uint16_t*)(EEPROM_OFFSET_I_CAL + (i*2))), EEPROM_Read_I_CAL(i));
+	}
+	// Read I_OFFSET
+	printPGMStr(STR_OFFSET);
+	for (uint8_t i = 0; i < PORT_CNT; i++) {
+		fprintf(&USBSerialStream, "%i:%i:%i ", ADC_Read_Raw(i), eeprom_read_byte((uint8_t*)(EEPROM_OFFSET_I_OFFSET + i)), EEPROM_Read_I_Offset(i));
 	}
 	
 	// Read Port Cycle Time
@@ -1015,7 +1044,9 @@ static inline void DEBUG_Dump(void) {
 
 // Read current flow on a given port
 static inline float ADC_Read_Port_Current(uint8_t port) {
-	float voltage = ADC_Read_Raw(port) * (EEPROM_Read_REF_V() / 1024) / EEPROM_Read_I_CAL(port);
+	int16_t raw = ADC_Read_Raw(port) - EEPROM_Read_I_Offset(port);
+	if(raw < 0) raw = 0;
+	float voltage = raw * (EEPROM_Read_REF_V() / 1024) / EEPROM_Read_I_CAL(port);
 	return (voltage / 0.02);
 }
 
