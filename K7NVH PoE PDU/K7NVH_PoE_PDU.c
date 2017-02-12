@@ -6,11 +6,6 @@
 // Watchdog - Problem exists where reset dumps into DFU, and waits there.
 // Up/down arrow keys?
 
-
-// Fix current/voltage limit checking
-// Fix port selection for non INPUT_Parse_args() commands
-// Store which bus ports are on for power calculation
-// Add Check_Voltage_Cutoff checking for both busses based on ports attached
 // Add port calibration (read offset while ports are off)
 
 #include "K7NVH_PoE_PDU.h"
@@ -172,10 +167,10 @@ int main(void) {
 		}
 		
 		// Timer interval, check voltage control
-//		if (check_voltage) {
-//			Check_Voltage_Cutoff();
-//			check_voltage = 0;
-//		}
+		if (check_voltage) {
+			Check_Voltage_Cutoff();
+			check_voltage = 0;
+		}
 		
 		// Keep the LUFA USB stuff fed regularly.
 		run_lufa();
@@ -770,7 +765,7 @@ static inline void Check_Voltage_Cutoff(void){
 	for (uint8_t i = 0; i < PORT_CNT; i++) {
 		if ((PORT_STATE[i] & 0b00000100) > 0) {
 			// Check the voltage as appropriate for the bus this port is on.
-			if (PORT_STATE[i] &= 0b00010000) {
+			if (PORT_STATE[i] & 0b00010000) {
 				voltage = ADC_Read_Alt_Voltage();
 			} else {
 				voltage = ADC_Read_Main_Voltage();
