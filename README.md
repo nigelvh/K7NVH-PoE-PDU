@@ -194,6 +194,11 @@ The 'SETBUSALT' command is used to reference a given port against the ALT bus vo
 
 The PDU supports setting multiple ports at a time to be referenced to the ALT bus. 'A' can also be substituted for a port number to change all ports. `SETBUSALT 1` `SETBUSALT 1 2 3 4` `SETBUSALT A`
 
+### SETOFFSET
+The 'SETOFFSET' command is used to store the current sense offset for a given port in raw ADC counts. This command is used only during calibration of the PDU. Raw ADC counts are available via the DEBUG command, and should be taken while the port is on, but no device is plugged in to offset the sensor error plus the status LED current.
+
+For example, to set the ADC offset for port 1 to 0 ADC counts, the following is valid 'SETOFFSET' syntax. `SETOFFSET 1 0`
+
 ### DEBUG
 The 'DEBUG' command is useful for debugging PDU state. It will output a variety of values, and may not be formatted for easy understanding.
 
