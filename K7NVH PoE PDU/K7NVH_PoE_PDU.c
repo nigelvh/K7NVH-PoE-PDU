@@ -1,10 +1,10 @@
 /* (c) 2017 Nigel Vander Houwen */
 //
 // TODO
-// High water mark stored in EEPROM (Lifetime & User resettable)
 // Port locking?
 // Watchdog - Problem exists where reset dumps into DFU, and waits there.
 // Up/down arrow keys?
+// Overload current time adjustable
 
 #include "K7NVH_PoE_PDU.h"
 
@@ -20,6 +20,9 @@ int main(void) {
 	// Initialize some variables
 	int16_t BYTE_IN = -1;
 	DATA_IN = malloc(DATA_BUFF_LEN);
+	for(uint8_t i = 0; i < PORT_CNT; i++){
+		PORT_HIGH_WATER[i] = 0;
+	}
 	
 	// Set the watchdog timer to interrupt for timekeeping
 	MCUSR &= ~(1 << WDRF);
@@ -1036,6 +1039,12 @@ static inline void DEBUG_Dump(void) {
 		}
 		fputc(' ', &USBSerialStream);
 	}
+	
+	// Read Port High Water Marks
+	printPGMStr(PSTR("\r\nI High Water: "));
+	for (uint8_t i = 0; i < PORT_CNT; i++) {
+		fprintf(&USBSerialStream, "%.2f ", (PORT_HIGH_WATER[i] / 100.0));
+	}
 }
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1044,10 +1053,19 @@ static inline void DEBUG_Dump(void) {
 
 // Read current flow on a given port
 static inline float ADC_Read_Port_Current(uint8_t port) {
+	// Read the raw current sense voltage value
 	int16_t raw = ADC_Read_Raw(port) - EEPROM_Read_I_Offset(port);
 	if(raw < 0) raw = 0;
-	float voltage = raw * (EEPROM_Read_REF_V() / 1024) / EEPROM_Read_I_CAL(port);
-	return (voltage / 0.02);
+	
+	// Calculate the current from the voltage reading
+	float current = (raw * (EEPROM_Read_REF_V() / 1024) / EEPROM_Read_I_CAL(port)) / 0.02;
+	
+	// Check current reading against the high water mark
+	if(current > (float)(PORT_HIGH_WATER[port] / 100.0)){
+		PORT_HIGH_WATER[port] = (uint8_t)(current * 100);
+	}
+	
+	return current;
 }
 
 // Read temperature (die temperature, uncalibrated, +/-10C)

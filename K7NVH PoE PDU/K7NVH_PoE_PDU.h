@@ -235,6 +235,7 @@ ps_set PORT_STATE[PORT_CNT];
 pbs_set PORT_BOOT_STATE[PORT_CNT];
 char * DATA_IN;
 uint8_t DATA_IN_POS = 0;
+uint8_t PORT_HIGH_WATER[PORT_CNT];
 
 /** LUFA CDC Class driver interface configuration and state information.
  * This structure is passed to all CDC Class driver functions, so that
