@@ -1061,8 +1061,12 @@ static inline float ADC_Read_Port_Current(uint8_t port) {
 	float current = (raw * (EEPROM_Read_REF_V() / 1024) / EEPROM_Read_I_CAL(port)) / 0.02;
 	
 	// Check current reading against the high water mark
-	if(current > (float)(PORT_HIGH_WATER[port] / 100.0)){
-		PORT_HIGH_WATER[port] = (uint8_t)(current * 100);
+	if (current > (float)(PORT_HIGH_WATER[port] / 100.0)){
+		if((current * 100) < 255){
+			PORT_HIGH_WATER[port] = (uint8_t)(current * 100);
+		} else {
+			PORT_HIGH_WATER[port] = 255;
+		}
 	}
 	
 	return current;
