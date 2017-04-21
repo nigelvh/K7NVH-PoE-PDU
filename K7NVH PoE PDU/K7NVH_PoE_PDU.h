@@ -27,41 +27,29 @@
 // ~~ Macros
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-#define TESTBOARD
+// Adjust the pins used to correspond with the prototype V1.0 build
+//#define TESTBOARD
 
 // Enable ANSI color codes to be sent. Uses a small bit of extra program space for 
 // storage of color codes/modified strings.
 #define ENABLECOLORS
 
 #define SOFTWARE_STR "\r\nK7NVH PoE PDU"
-#define HARDWARE_VERS "1.0"
+#define HARDWARE_VERS "1.1"
 #define SOFTWARE_VERS "1.0"
 #define PORT_CNT    12
 #define INPUT_CNT	12
 #define DATA_BUFF_LEN    32
 #define ADC_AVG_POINTS   5
 
-#define SPI_CLOCK_DIV4 0x00
-#define SPI_CLOCK_DIV16 0x01
-#define SPI_CLOCK_DIV64 0x02
-#define SPI_CLOCK_DIV128 0x03
-#define SPI_CLOCK_DIV2 0x04
-#define SPI_CLOCK_DIV8 0x05
-#define SPI_CLOCK_DIV32 0x06
-
-#define SPI_MODE0 0x00
-#define SPI_MODE1 0x04
-#define SPI_MODE2 0x08
-#define SPI_MODE3 0x0C
-
-#define SPI_MODE_MASK 0x0C  // CPOL = bit 3, CPHA = bit 2 on SPCR
-#define SPI_CLOCK_MASK 0x03  // SPR1 = bit 1, SPR0 = bit 0 on SPCR
-#define SPI_2XCLOCK_MASK 0x01  // SPI2X = bit 0 on SPSR
-
 // SPI pins
 #ifndef TESTBOARD
 
-// Define the non-testboard SPI pins
+#define SPI_SS_1 PB0
+#define SPI_SS_2 PB7
+#define SPI_SCK PB1
+#define SPI_MOSI PB2
+#define SPI_MISO PB3
 
 #else
 
@@ -88,8 +76,17 @@
 #define P12EN PC6
 
 // LED1 = Status (Left), LED2 = Error (Right)
+#ifndef TESTBOARD
+
+#define LED1 PF6
+#define LED2 PF7
+
+#else
+
 #define LED1 PB3
 #define LED2 PB7
+
+#endif
 
 // Limits
 #define PCYCLE_MAX_TIME 30 // Seconds
@@ -275,11 +272,7 @@ USB_ClassInfo_CDC_Device_t VirtualSerial_CDC_Interface = {
 
 // SPI
 static inline void SPI_begin(void);
-static inline void SPI_end(void);
 static inline uint8_t SPI_transfer(uint8_t _data);
-static inline void SPI_setBitOrder(uint8_t bitOrder);
-static inline void SPI_setDataMode(uint8_t mode);
-static inline void SPI_setClockDivider(uint8_t rate);
 
 // USB
 static inline void run_lufa(void);

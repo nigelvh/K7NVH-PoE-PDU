@@ -4,7 +4,7 @@
 // Port locking?
 // Watchdog - Problem exists where reset dumps into DFU, and waits there.
 // Up/down arrow keys?
-// Overload current time adjustable
+// Overload current time adjustable?
 
 #include "K7NVH_PoE_PDU.h"
 
@@ -59,13 +59,14 @@ int main(void) {
 	run_lufa();
 
 	// Set up LED pins
+#ifndef TESTBOARD
+	DDRF |= (1 << LED1)|(1 << LED2);
+#else
 	DDRB |= (1 << LED1)|(1 << LED2);
-	
-	// Set up SPI pins
-	DDRB |= (1 << SPI_SCK)|(1 << SPI_MOSI);
-	DDRF |= (1 << SPI_SS_1)|(1 << SPI_SS_2);
-	DDRB &= ~(1 << SPI_MISO);
-	PORTB &= ~(1 << SPI_MISO);
+#endif
+
+	// Set up SPI
+	SPI_begin();
 
 	// Enable the ADC
 	ADCSRA = (1<<ADEN) | (1<<ADPS2) | (1<<ADPS1) | (1<<ADPS0); // Enable ADC, clocked by /128 divider
@@ -98,7 +99,7 @@ int main(void) {
 
 		// USB Serial stream will return <0 if no bytes are available.
 		if (BYTE_IN >= 0) {
-			// We've gotten a char, so lets blink the green LED onboard. This LED will 
+			// We've gotten a char, so lets blink the status LED onboard. This LED will 
 			// remain lit while the board is processing commands. This is most evident 
 			// during a PCYCLE.
 			LED_CTL(0, 1);
@@ -158,7 +159,7 @@ int main(void) {
 			}
 		}
 
-		// Turn the green LED back off again
+		// Turn the status LED back off again
 		LED_CTL(0, 0);
 		
 		// Check for above threshold current usage
@@ -716,19 +717,35 @@ static inline void PORT_CTL(uint8_t port, uint8_t state) {
 // Turn a LED ON (state == 1) or OFF (state == 0)
 // LED 0 == Green, LED 1 == Red
 static inline void LED_CTL(uint8_t led, uint8_t state) {
+#ifndef TESTBOARD
 	if (state == 1) {
 		if (led == 1) {
-			PORTB |= (1 << LED1);
+			PORTF |= (1 << LED2);
 		} else {
-			PORTB |= (1 << LED2);
+			PORTF |= (1 << LED1);
 		}
 	} else {
 		if (led == 1) {
-			PORTB &= ~(1 << LED1);
+			PORTF &= ~(1 << LED2);
 		} else {
-			PORTB &= ~(1 << LED2);
+			PORTF &= ~(1 << LED1);
 		}
 	}
+#else
+	if (state == 1) {
+		if (led == 1) {
+			PORTB |= (1 << LED2);
+		} else {
+			PORTB |= (1 << LED1);
+		}
+	} else {
+		if (led == 1) {
+			PORTB &= ~(1 << LED2);
+		} else {
+			PORTB &= ~(1 << LED1);
+		}
+	}
+#endif
 }
 
 // Check all ports for exceeding current limits, disable the port, and set the RED led.
@@ -736,6 +753,9 @@ static inline void Check_Current_Limits(void){
 	// Check for above threshold current usage
 	for (uint8_t i = 0; i < PORT_CNT; i++) {
 		if (PORT_Check_Current_Limit(i)) {
+			// If this port has already overloaded, don't repeat the message.
+			if ((PORT_STATE[i] & 0x02) > 0) break;
+		
 			// Current is above threshold. Print a warning message.
 			fprintf(&USBSerialStream, "\r\n");
 			printPGMStr(STR_Overload);
@@ -750,14 +770,14 @@ static inline void Check_Current_Limits(void){
 			// Does not disable voltage control settings stored in EEPROM
 			PORT_STATE[i] &= 0b11111011;
 				
-			// Turn the RED LED on.
+			// Turn the error LED on.
 			LED_CTL(1, 1);
 				
 			INPUT_Clear();
 		}
 	}
 		
-	// If no ports are listed as overload anymore, disable the RED led.
+	// If no ports are listed as overload anymore, disable the error led.
 	uint8_t error = 0;
 	for (uint8_t i = 0; i < PORT_CNT; i++) {
 		if ((PORT_STATE[i] & 0x02) > 0) error++;
@@ -1105,13 +1125,13 @@ static inline uint16_t ADC_Read_Raw(uint8_t port) {
 	for (count = 0; count < ADC_AVG_POINTS; count++) {
 		if ((port >= 0 && port < 6) || port == 12 || port == 13) {
 #ifndef TESTBOARD
-			// SPI SS Pins
+			PORTB &= ~(1 << SPI_SS_1);
 #else
 			PORTF &= ~(1 << SPI_SS_1);
 #endif
 		} else if (port >= 6 && port < 12) {
 #ifndef TESTBOARD
-			// SPI SS Pins
+			PORTB &= ~(1 << SPI_SS_2);
 #else
 			PORTF &= ~(1 << SPI_SS_2);
 #endif		
@@ -1126,13 +1146,13 @@ static inline uint16_t ADC_Read_Raw(uint8_t port) {
 
 		if ((port >= 0 && port < 6) || port == 12 || port == 13) {
 #ifndef TESTBOARD
-			// SPI SS Pins
+			PORTB |= (1 << SPI_SS_1);
 #else
 			PORTF |= (1 << SPI_SS_1);
 #endif
 		} else if (port >= 6 && port < 12) {
 #ifndef TESTBOARD
-			// SPI SS Pins
+			PORTB |= (1 << SPI_SS_2);
 #else
 			PORTF |= (1 << SPI_SS_2);
 #endif		
@@ -1182,68 +1202,24 @@ void EVENT_USB_Device_ControlRequest(void) {
 // ~~ SPI Functions
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-#ifndef TESTBOARD
-
-// Set up the SPI registers to enable the SPI hardware
-static inline void SPI_begin(void) {
-	// Set up SPI pins
-	DDRB |= (1 << SPI_SS_PORTS)|(1 << SPI_SCK)|(1 << SPI_MOSI);
-	DDRD |= (1 << SPI_SS_INPUTS);
-	PORTB |= (1 << SPI_SS_PORTS);
-	PORTD |= (1 << SPI_SS_INPUTS);
-	PORTB &= ~(1 << SPI_SCK);
-
-	// Enable SPI Master bit in the register
-	SPCR |= _BV(MSTR);
-	SPCR |= _BV(SPE);
-
-	// Set our mode options
-	SPI_setClockDivider(SPI_CLOCK_DIV128);
-	SPI_setDataMode(SPI_MODE0);
-	SPI_setBitOrder(1);
-}
-
-// Disable the SPI hardware
-static inline void SPI_end(void) {
-	SPCR &= ~_BV(SPE);
-}
-
-// Transfer out a byte on the SPI port, and simultaneously read a byte from SPI
-static inline uint8_t SPI_transfer(uint8_t _data) {
-	SPDR = _data;
-	while(!(SPSR & _BV(SPIF))) {};
-	return SPDR;
-}
-
-// 0 = LSBFIRST
-static inline void SPI_setBitOrder(uint8_t bitOrder) {
-	if (bitOrder == 0) {
-		SPCR |= _BV(DORD);
-	} else {
-		SPCR &= ~(_BV(DORD));
-	}
-}
-
-// Set SPI data mode (where in the cycle bits are to be read)
-static inline void SPI_setDataMode(uint8_t mode) {
-	SPCR = (SPCR & ~SPI_MODE_MASK) | mode;
-}
-
-// Set the SPI clock divider to determine overall speed
-static inline void SPI_setClockDivider(uint8_t rate) {
-	SPCR = (SPCR & ~SPI_CLOCK_MASK) | (rate & SPI_CLOCK_MASK);
-	SPSR = (SPSR & ~SPI_2XCLOCK_MASK) | ((rate >> 2) & SPI_2XCLOCK_MASK);
-}
-
-#else
-
 // Set up the port registers for SPI
 static inline void SPI_begin(void) {
 	// Set up SPI pins
+#ifndef TESTBOARD	
+	DDRB |= (1 << SPI_SS_1) | (1 << SPI_SS_2);
+	DDRB |= (1 << SPI_SCK)|(1 << SPI_MOSI);
+	PORTB |= (1 << SPI_SS_1) | (1 << SPI_SS_2);
+	PORTB &= ~(1 << SPI_SCK);
+	DDRB &= ~(1 << SPI_MISO);
+	PORTB &= ~(1 << SPI_MISO);
+#else
 	DDRF |= (1 << SPI_SS_1) | (1 << SPI_SS_2);
 	DDRB |= (1 << SPI_SCK)|(1 << SPI_MOSI);
 	PORTF |= (1 << SPI_SS_1) | (1 << SPI_SS_2);
 	PORTB &= ~(1 << SPI_SCK);
+	DDRB &= ~(1 << SPI_MISO);
+	PORTB &= ~(1 << SPI_MISO);
+#endif
 }
 
 // Transfer out a byte on the SPI port, and simultaneously read a byte from SPI
@@ -1265,24 +1241,3 @@ static inline uint8_t SPI_transfer(uint8_t data) {
 	return value;
 }
 
-// Disable the SPI hardware
-static inline void SPI_end(void) {
-	// Do nothing, we're not using hardware SPI
-}
-
-// 0 = LSBFIRST
-static inline void SPI_setBitOrder(uint8_t bitOrder) {
-	// Do nothing, we're not using hardware SPI
-}
-
-// Set SPI data mode (where in the cycle bits are to be read)
-static inline void SPI_setDataMode(uint8_t mode) {
-	// Do nothing, we're not using hardware SPI
-}
-
-// Set the SPI clock divider to determine overall speed
-static inline void SPI_setClockDivider(uint8_t rate) {
-	// Do nothing, we're not using hardware SPI
-}
-
-#endif
