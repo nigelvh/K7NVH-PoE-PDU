@@ -101,6 +101,7 @@
 #define VMAX 50
 
 // Timing
+#define TICKS_PER_SECOND 4
 #define VCTL_DELAY 20 // Ticks. ~5s
 #define ICTL_DELAY 1 // Ticks. ~0.25s
 
@@ -142,17 +143,22 @@
 // Timer
 volatile unsigned long timer = 0;
 // Schedule
-volatile uint8_t check_voltage = 0;
-volatile uint8_t check_current = 0;
+volatile uint8_t schedule_check_voltage = 0;
+volatile uint8_t schedule_check_current = 0;
+volatile uint8_t schedule_port_cycle = 0;
 
-typedef uint16_t pd_set; // Port Descriptor Set - bitmap of ports
-
+// Port Set - bitmap of ports
+typedef uint16_t pd_set;
 // Port State Set - bitmap of port state
 // (NUL,NUL,NUL,AUX bus?,VCTL Changing,VCTL Enabled?,Overload,Enabled?)
 typedef uint8_t ps_set;
 // Port Boot State Set - bitmap of port boot state
 // (NUL,NUL,NUL,NUL,NUL,AUX bus?,VCTL Enabled?,Enabled?)
 typedef uint8_t pbs_set;
+
+// Port Cycle Tracking
+pd_set cycle_ports;
+volatile uint8_t cycle_timer = 0;
 
 // Standard file stream for the CDC interface when set up, so that the
 // virtual CDC COM port can be used like any regular character stream

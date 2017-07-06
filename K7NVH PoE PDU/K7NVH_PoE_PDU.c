@@ -3,16 +3,22 @@
 // TODO
 // Port locking?
 // Watchdog - Problem exists where reset dumps into DFU, and waits there.
-// Up/down arrow keys?
 // Overload current time adjustable?
 
 #include "K7NVH_PoE_PDU.h"
 
-ISR(WDT_vect){
+// Main Scheduling Interrupt
+ISR(TIMER1_COMPA_vect){
 	timer++;
-	
-	if ((timer) % VCTL_DELAY == 0){ check_voltage = 1; }
-	if ((timer) % ICTL_DELAY == 0){ check_current = 1; }
+
+	if ((timer) % VCTL_DELAY == 0){ schedule_check_voltage = 1; }
+	if ((timer) % ICTL_DELAY == 0){ schedule_check_current = 1; }
+	if (cycle_ports > 0) {
+		cycle_timer--;
+		if (cycle_timer == 0) {
+			schedule_port_cycle = 1;
+		}
+	}
 }
 
 // Main program entry point.
@@ -25,15 +31,17 @@ int main(void) {
 	}
 	
 	// Set the watchdog timer to interrupt for timekeeping
-	MCUSR &= ~(1 << WDRF);
-	WDTCSR |= 0b00011000; // Set WDCE and WDE to enable WDT changes
-	WDTCSR = 0b01000011; // Enable watchdog interrupt and Interrupt at 0.25s
+//	MCUSR &= ~(1 << WDRF);
+//	WDTCSR |= 0b00011000; // Set WDCE and WDE to enable WDT changes
+//	WDTCSR = 0b01000011; // Enable watchdog interrupt and Interrupt at 0.25s
 
-	// Save some power by disabling peripherals.
-	PRR0 &= 0b11010111;
-	PRR1 &= 0b11111110;
-	ACSR &= 0b10111111;
-	ACSR |= 0b10001000;
+	// Set up timer 1 for 0.25s interrupts
+	TCCR1A = 0b00000000; // No pin changes on compare match
+	TCCR1B = 0b00001010; // Clear timer on compare match, clock /8
+	TCCR1C = 0b00000000; // No forced output compare
+	OCR1A = 31250; // Set timer clear at this count value
+	TCNT1 = 0;
+	TIMSK1 = 0b00000010; // Enable interrupts on the A compare match
 
 	// Divide 16MHz crystal down to 1MHz for CPU clock.
 	clock_prescale_set(clock_div_16);
@@ -141,6 +149,7 @@ int main(void) {
 				case 30:
 					// Ctrl-^ jump into the bootloader
 					TIMSK0 = 0b00000000; // Interrupt will mess with the bootloader
+					TIMSK1 = 0b00000000; 
 					bootloader();
 					break; // We should never get here...
 
@@ -163,15 +172,26 @@ int main(void) {
 		LED_CTL(0, 0);
 		
 		// Check for above threshold current usage
-		if (check_current) {
+		if (schedule_check_current) {
 			Check_Current_Limits();
-			check_current = 0;
+			schedule_check_current = 0;
 		}
 		
 		// Timer interval, check voltage control
-		if (check_voltage) {
+		if (schedule_check_voltage) {
 			Check_Voltage_Cutoff();
-			check_voltage = 0;
+			schedule_check_voltage = 0;
+		}
+		
+		// Handle port cycles
+		if (schedule_port_cycle) {
+			PORT_Set_Ctl(&cycle_ports, 1);
+			
+			cycle_ports = 0;
+			cycle_timer = 0;
+			schedule_port_cycle = 0;
+			
+			INPUT_Clear();
 		}
 		
 		// Keep the LUFA USB stuff fed regularly.
@@ -286,18 +306,14 @@ static inline void INPUT_Parse(void) {
 		DATA_IN += 6;
 		INPUT_Parse_args(&pd, DATA_IN);
 		
-		PORT_Set_Ctl(&pd, 0);
-
-		fprintf(&USBSerialStream, "\r\n");
-		run_lufa();
-		for (uint16_t i = 0; i < (EEPROM_Read_PCycle_Time()); i++) {
-			_delay_ms(1000);
-			fputc('.', &USBSerialStream);
-			run_lufa();
+		// If a port cycle is already in progress, error out.
+		if (cycle_ports > 0) {
+			printPGMStr(STR_Unrecognized);
+		} else {
+			PORT_Set_Ctl(&pd, 0);
+			cycle_ports = pd;
+			cycle_timer = EEPROM_Read_PCycle_Time() * TICKS_PER_SECOND;
 		}
-
-		PORT_Set_Ctl(&pd, 1);
-		
 		return;
 	}
 	// SETCYCLE - Set PCYCLE_TIME and store in EEPROM
