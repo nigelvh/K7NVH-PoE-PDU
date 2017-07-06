@@ -2,7 +2,6 @@
 //
 // TODO
 // Port locking?
-// Watchdog - Problem exists where reset dumps into DFU, and waits there.
 // Overload current time adjustable?
 
 #include "K7NVH_PoE_PDU.h"
@@ -23,6 +22,9 @@ ISR(TIMER1_COMPA_vect){
 
 // Main program entry point.
 int main(void) {
+	// Store our reset vector for reference
+	BOOT_RESET_VECTOR = MCUSR;
+
 	// Initialize some variables
 	int16_t BYTE_IN = -1;
 	DATA_IN = malloc(DATA_BUFF_LEN);
@@ -30,10 +32,9 @@ int main(void) {
 		PORT_HIGH_WATER[i] = 0;
 	}
 	
-	// Set the watchdog timer to interrupt for timekeeping
-//	MCUSR &= ~(1 << WDRF);
-//	WDTCSR |= 0b00011000; // Set WDCE and WDE to enable WDT changes
-//	WDTCSR = 0b01000011; // Enable watchdog interrupt and Interrupt at 0.25s
+	Watchdog_Disable();
+	wdt_reset();
+	Watchdog_Enable();
 
 	// Set up timer 1 for 0.25s interrupts
 	TCCR1A = 0b00000000; // No pin changes on compare match
@@ -59,6 +60,7 @@ int main(void) {
 	// Wait 5 seconds so that we can open a console to catch startup messages
 	for (uint16_t i = 0; i < 500; i++) {
 		_delay_ms(10);
+		wdt_reset();
 	}
 
 	// Print startup message
@@ -148,8 +150,13 @@ int main(void) {
 					
 				case 30:
 					// Ctrl-^ jump into the bootloader
-					TIMSK0 = 0b00000000; // Interrupt will mess with the bootloader
-					TIMSK1 = 0b00000000; 
+					// Timer interrupts will mess with the bootloader
+					TIMSK0 = 0b00000000;
+					TIMSK1 = 0b00000000;
+					 
+					// Disable the watchdog timer
+					Watchdog_Disable();
+					
 					bootloader();
 					break; // We should never get here...
 
@@ -196,6 +203,9 @@ int main(void) {
 		
 		// Keep the LUFA USB stuff fed regularly.
 		run_lufa();
+		
+		// Reset the watchdog
+		wdt_reset();
 	}
 }
 
@@ -1022,6 +1032,9 @@ static inline void DEBUG_Dump(void) {
 	// Print hardware and software versions
 	fprintf(&USBSerialStream, "\r\nV%s,%s", HARDWARE_VERS, SOFTWARE_VERS);
 
+	// Print uptime
+	fprintf(&USBSerialStream, "\r\nUp: %lus, Rst: %i", (timer / TICKS_PER_SECOND), BOOT_RESET_VECTOR);
+
 	// Read port defaults
 	printPGMStr(STR_Port_Default);
 	for (uint8_t i = 0; i < PORT_CNT; i++) {
@@ -1257,3 +1270,25 @@ static inline uint8_t SPI_transfer(uint8_t data) {
 	return value;
 }
 
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// ~~ Watchdog Functions
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+// Disables the watchdog timer
+static inline void Watchdog_Disable(void) {
+	cli();
+	wdt_reset();
+	MCUSR &= ~(1 << WDRF);
+	WDTCSR |= (1 << WDCE) | (1 << WDE);
+	WDTCSR = 0x00;
+	sei();
+}
+
+// Enables the watchdog timer
+static inline void Watchdog_Enable(void) {
+	cli();
+	wdt_reset();
+	WDTCSR |= (1 << WDCE) | (1 << WDE);
+	WDTCSR = (1 << WDE) | (1 << WDP3) | (1 << WDP0);
+	sei();
+}

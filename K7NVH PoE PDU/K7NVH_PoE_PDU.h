@@ -240,6 +240,8 @@ char * DATA_IN;
 uint8_t DATA_IN_POS = 0;
 uint8_t PORT_HIGH_WATER[PORT_CNT];
 
+uint8_t BOOT_RESET_VECTOR = 0;
+
 /** LUFA CDC Class driver interface configuration and state information.
  * This structure is passed to all CDC Class driver functions, so that
  * multiple instances of the same class within a device can be
@@ -339,5 +341,9 @@ static inline void INPUT_Clear(void);
 static inline void INPUT_Parse(void);
 static inline void INPUT_Parse_args(pd_set *pd, char *str);
 static inline int8_t INPUT_Parse_port(void);
+
+// Watchdog
+static inline void Watchdog_Disable(void);
+static inline void Watchdog_Enable(void);
 
 #endif
