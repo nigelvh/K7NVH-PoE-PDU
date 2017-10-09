@@ -58,14 +58,6 @@ int main(void) {
 	// Enable interrupts
 	GlobalInterruptEnable();
 
-	run_lufa();
-
-	// Wait 5 seconds so that we can open a console to catch startup messages
-	for (uint16_t i = 0; i < 500; i++) {
-		_delay_ms(10);
-		wdt_reset();
-	}
-
 	// Print startup message
 	printPGMStr(PSTR(SOFTWARE_STR));
 	fprintf(&USBSerialStream, " V%s,%s", HARDWARE_VERS, SOFTWARE_VERS);
