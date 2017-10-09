@@ -2,6 +2,7 @@
 //
 // TODO
 // Port locking?
+// Staggered port startup (can we do this faster than PSU hup cycle?)
 // Overload current time adjustable?
 
 #include "K7NVH_PoE_PDU.h"
@@ -23,7 +24,9 @@ ISR(TIMER1_COMPA_vect){
 // Main program entry point.
 int main(void) {
 	// Store our reset vector for reference
+	// See ATmega32u4 Datasheet p.59 for values
 	BOOT_RESET_VECTOR = MCUSR;
+	MCUSR = 0;
 
 	// Initialize some variables
 	int16_t BYTE_IN = -1;
