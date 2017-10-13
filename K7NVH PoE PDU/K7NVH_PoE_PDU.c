@@ -1,7 +1,6 @@
 /* (c) 2017 Nigel Vander Houwen */
 //
 // TODO
-// Port locking?
 // Staggered port startup (can we do this faster than PSU hup cycle?)
 // Overload current time adjustable?
 

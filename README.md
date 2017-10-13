@@ -83,6 +83,16 @@ If 'PCYCLE' is issued on a port that is already disabled, the port will remain d
 
 The PDU supports cycling multiple ports at a time. 'A' can also be substituted for a port number to cycle all ports. The following are valid PCYCLE syntaxes. `PCYCLE 1` `PCYCLE 1 2 3 4` `PCYCLE A`
 
+### PLOCKON
+The 'PLOCKON' command is used to lock a port, preventing user initiated conrols (PON/POFF/PCYCLE).
+
+The PDU supports setting multiple ports at a time to be locked. 'A' can also be substituted for a port number to change all ports. `PLOCKON 1` `PLOCKON 1 2 3 4` `PLOCKON A`
+
+### PLOCKOFF
+The 'PLOCKOFF' command is used to unlock a port, allowing user initiated conrols (PON/POFF/PCYCLE) on a previously locked port.
+
+The PDU supports setting multiple ports at a time to be unlocked. 'A' can also be substituted for a port number to change all ports. `PLOCKOFF 1` `PLOCKOFF 1 2 3 4` `PLOCKOFF A`
+
 ### SETCYCLE
 The 'SETCYCLE' command is used to set the period of time in seconds that ports will be disabled on the PDU during a 'PCYCLE' command. This command has no immediate impact on any ports.
 
