@@ -19,6 +19,7 @@ ISR(TIMER1_COMPA_vect){
 			schedule_port_cycle = 1;
 		}
 	}
+	if ((timer) % IRST_DELAY == 0){ schedule_reset_current = 1; }
 }
 
 // Main program entry point.
@@ -84,6 +85,7 @@ int main(void) {
 		if (PORT_BOOT_STATE[i] & 0b00000001) { PORT_CTL(i, 1); } else { PORT_CTL(i, 0); } // Enable port if set
 		if (PORT_BOOT_STATE[i] & 0b00000010) { PORT_STATE[i] |= 0b00000100; } // Enable VCTL if set
 		if (PORT_BOOT_STATE[i] & 0b00000100) { PORT_STATE[i] |= 0b00010000; } // Port is on AUX bus (used for power calculations)
+		if (PORT_BOOT_STATE[i] & 0b00001000) { PORT_STATE[i] |= 0b00100000; } // Port is locked
 	}
 	// Set up control pins
 	DDRD |= (1 << P1EN)|(1 << P2EN)|(1 << P3EN)|(1 << P4EN)|(1 << P5EN)|(1 << P6EN)|(1 << P7EN)|(1 << P8EN);
@@ -194,6 +196,18 @@ int main(void) {
 			schedule_port_cycle = 0;
 			
 			INPUT_Clear();
+		}
+		
+		// Reset overloaded ports
+		if (schedule_reset_current) {
+			schedule_reset_current = 0;
+			for (uint8_t i = 0; i < PORT_CNT; i++) {
+				// Port was overloaded, try re-enabling.
+				if ((PORT_STATE[i] & 0x02) > 0) {
+					PORT_CTL(i, 1);
+					PORT_STATE[i] &= 0b11111101;
+				}
+			}		
 		}
 		
 		// Keep the LUFA USB stuff fed regularly.
@@ -575,6 +589,39 @@ static inline void INPUT_Parse(void) {
 			}
 		}
 	}
+	// PLOCK - Lock/Unlock a port (limits use of PON/POFF/PCYCLE commands)
+	if (strncasecmp_P(DATA_IN, STR_Command_PLOCK, 5) == 0) {
+		DATA_IN += 5;
+		uint8_t state = 255;
+		if (strncasecmp_P(DATA_IN, PSTR("ON"), 2) == 0) {
+			state = 1;
+			DATA_IN += 2;
+		}
+		if (strncasecmp_P(DATA_IN, PSTR("OFF"), 3) == 0) {
+			state = 0;
+			DATA_IN += 3;
+		}
+		if (state <= 1) {
+			INPUT_Parse_args(&pd, DATA_IN);
+			for (uint8_t i = 0; i < PORT_CNT; i++) {
+				if (pd & (1 << i)) {
+					if (state == 1) {
+						PORT_STATE[i] |= 0b00100000;
+						PORT_BOOT_STATE[i] |= 0b00001000;
+					}else{
+						PORT_STATE[i] &= 0b11011111;
+						PORT_BOOT_STATE[i] &= 0b11110111;
+					}
+					EEPROM_Write_Port_Boot_State(i, PORT_BOOT_STATE[i]);
+				
+					printPGMStr(STR_Port_Lock);
+					fprintf(&USBSerialStream, "%i ", i+1);
+					printPGMStr(state ? STR_Enabled : STR_Disabled);
+				}
+			}
+			return;
+		}
+	}
 	
 	// If none of the above commands were recognized, print a generic error.
 	printPGMStr(STR_Unrecognized);
@@ -637,6 +684,9 @@ static inline void PRINT_Status(void) {
 		
 		// Voltage Control?
 		if (PORT_STATE[i] & 0b00000100) { printPGMStr(STR_VCTL); }
+		
+		// Locked?
+		if (PORT_STATE[i] & 0b00100000) { printPGMStr(STR_Locked); }
 	}
 }
 
@@ -663,6 +713,7 @@ static inline void PRINT_Status_Prog(void){
 		uint8_t port_overload = (PORT_STATE[i] & 0b00000010) >> 1;
 		uint8_t port_vctl = (PORT_STATE[i] & 0b00000100) >> 2;
 		uint8_t port_altbus = (PORT_STATE[i] & 0b00010000) >> 4;
+		uint8_t port_locked = (PORT_STATE[i] & 0b00100000) >> 5;
 		
 		float current = ADC_Read_Port_Current(i);
 		if (PORT_STATE[i] & 0b00010000) {
@@ -671,8 +722,8 @@ static inline void PRINT_Status_Prog(void){
 			power = main_voltage * current;
 		}
 		
-		fprintf(&USBSerialStream, "\r\n%i,%s,%i,%.2f,%.1f,%i,%i,%i", i+1, temp_name, port_state, \
-			current, power, port_overload, port_vctl, port_altbus);
+		fprintf(&USBSerialStream, "\r\n%i,%s,%i,%.2f,%.1f,%i,%i,%i,%i", i+1, temp_name, port_state, \
+			current, power, port_overload, port_vctl, port_altbus, port_locked);
 	}
 }
 
@@ -695,11 +746,17 @@ static inline void printPGMStr(PGM_P s) {
 static inline void PORT_Set_Ctl(pd_set *pd, uint8_t state) {
 	for (uint8_t i = 0; i < PORT_CNT; i++) {
 		if (*pd & (1 << i)) {
-			PORT_CTL(i, state);
-			
-			// If a port is controlled manually, make sure that voltage control gets disabled
-			// Does not disable voltage control settings stored in EEPROM
-			PORT_STATE[i] &= 0b11111011;
+			if (PORT_STATE[i] & 0b00100000) {
+				// Port is locked
+				fprintf(&USBSerialStream, "\r\n%i ", i+1);
+				printPGMStr(STR_Locked);
+			} else {
+				PORT_CTL(i, state);
+				
+				// If a port is controlled manually, make sure that voltage control gets disabled
+				// Does not disable voltage control settings stored in EEPROM
+				PORT_STATE[i] &= 0b11111011;
+			}
 		}
 	}
 }
@@ -1028,7 +1085,13 @@ static inline void DEBUG_Dump(void) {
 	fprintf(&USBSerialStream, "\r\nV%s,%s", HARDWARE_VERS, SOFTWARE_VERS);
 
 	// Print uptime
-	fprintf(&USBSerialStream, "\r\nUp: %lus, Rst: %i", (timer / TICKS_PER_SECOND), BOOT_RESET_VECTOR);
+	fprintf(&USBSerialStream, "\r\nUp: %lus, Rst: %i\r\n", (timer / TICKS_PER_SECOND), BOOT_RESET_VECTOR);
+
+	// Read port state
+	printPGMStr(STR_Command_STATUS);
+	for (uint8_t i = 0; i < PORT_CNT; i++) {
+		fprintf(&USBSerialStream, " %i", PORT_STATE[i]);
+	}
 
 	// Read port defaults
 	printPGMStr(STR_Port_Default);

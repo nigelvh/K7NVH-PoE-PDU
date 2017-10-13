@@ -104,6 +104,7 @@
 #define TICKS_PER_SECOND 4
 #define VCTL_DELAY 20 // Ticks. ~5s
 #define ICTL_DELAY 1 // Ticks. ~0.25s
+#define IRST_DELAY 1200 // Ticks. ~5min
 
 // EEPROM Offsets
 // Stored settings
@@ -146,14 +147,15 @@ volatile unsigned long timer = 0;
 volatile uint8_t schedule_check_voltage = 0;
 volatile uint8_t schedule_check_current = 0;
 volatile uint8_t schedule_port_cycle = 0;
+volatile uint8_t schedule_reset_current = 0;
 
 // Port Set - bitmap of ports
 typedef uint16_t pd_set;
 // Port State Set - bitmap of port state
-// (NUL,NUL,NUL,AUX bus?,VCTL Changing,VCTL Enabled?,Overload,Enabled?)
+// (NUL,NUL,Locked?,AUX bus?,VCTL Changing,VCTL Enabled?,Overload,Enabled?)
 typedef uint8_t ps_set;
 // Port Boot State Set - bitmap of port boot state
-// (NUL,NUL,NUL,NUL,NUL,AUX bus?,VCTL Enabled?,Enabled?)
+// (NUL,NUL,NUL,NUL,Locked?,AUX bus?,VCTL Enabled?,Enabled?)
 typedef uint8_t pbs_set;
 
 // Port Cycle Tracking
@@ -180,6 +182,7 @@ const char STR_Help_Info[] PROGMEM = "\r\nVisit https://github.com/nigelvh/K7NVH
 	const char STR_Disabled[] PROGMEM = "\x1b[31mDISABLED\x1b[0m";
 	const char STR_Overload[] PROGMEM = " \x1b[31m!OVERLOAD!\x1b[0m";
 	const char STR_VCTL[] PROGMEM = " \x1b[36mVOLTAGE CTL\x1b[0m";
+	const char STR_Locked[] PROGMEM = "\x1b[33mLOCKED\x1b[0m";
 #else
 	const char STR_Unrecognized[] PROGMEM = "\r\nINVALID COMMAND";
 	const char STR_Enabled[] PROGMEM = "ENABLED";
@@ -202,6 +205,7 @@ const char STR_ICAL[] PROGMEM = "\r\nICAL: ";
 const char STR_MAIN[] PROGMEM = "MAIN";
 const char STR_ALT[] PROGMEM = "ALT";
 const char STR_OFFSET[] PROGMEM = "\r\nOFFSET: ";
+const char STR_Port_Lock[] PROGMEM = "\r\nPORT LOCK ";
 
 // Command strings
 const char STR_Command_HELP[] PROGMEM = "HELP";
@@ -222,6 +226,7 @@ const char STR_Command_VCTL[] PROGMEM = "VCTL";
 const char STR_Command_SETVCTL[] PROGMEM = "SETVCTL";
 const char STR_Command_SETBUS[] PROGMEM = "SETBUS";
 const char STR_Command_SETOFFSET[] PROGMEM = "SETOFFSET";
+const char STR_Command_PLOCK[] PROGMEM = "PLOCK";
 
 // Port to pin lookup table
 const uint8_t Ports_Pins[PORT_CNT] = \
