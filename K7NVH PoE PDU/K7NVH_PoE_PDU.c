@@ -646,6 +646,13 @@ static inline void PRINT_Status(void) {
 	printPGMStr(PSTR("\tTemperature: "));
 	fprintf(&USBSerialStream, "%dC", ADC_Read_Temperature());
 	
+	float ext1_voltage = ADC_Read_EXT_Voltage(0);
+	float ext2_voltage = ADC_Read_EXT_Voltage(1);
+	printPGMStr(PSTR("\r\nEXT1: "));
+	fprintf(&USBSerialStream, "%.2fV", ext1_voltage);
+	printPGMStr(PSTR("\tEXT2: "));
+	fprintf(&USBSerialStream, "%.2fV", ext2_voltage);
+	
 	// Ports
 	for(uint8_t i = 0; i < PORT_CNT; i++) {
 		// PORT
@@ -694,6 +701,8 @@ static inline void PRINT_Status_Prog(void){
 	char temp_name[16];
 	float main_voltage = ADC_Read_Main_Voltage();
 	float alt_voltage = ADC_Read_Alt_Voltage();
+	float ext1_voltage = ADC_Read_EXT_Voltage(0);
+	float ext2_voltage = ADC_Read_EXT_Voltage(1);
 	float power;
 	
 	// Device Description,Software version,Unit Name
@@ -702,7 +711,7 @@ static inline void PRINT_Status_Prog(void){
 	fprintf(&USBSerialStream, ",%s,%s", SOFTWARE_VERS, temp_name);
 	
 	// Input Voltage,Temperature
-	fprintf(&USBSerialStream, "\r\n%.2f,%.2f,%d", main_voltage, alt_voltage, ADC_Read_Temperature());
+	fprintf(&USBSerialStream, "\r\n%.2f,%.2f,%d,%.2f,%.2f", main_voltage, alt_voltage, ADC_Read_Temperature(), ext1_voltage, ext2_voltage);
 	
 	// Port Number,Port Name,Enabled?,Current,Power,Overload,AltBus?
 	for (uint8_t i = 0; i < PORT_CNT; i++) {
@@ -1199,6 +1208,15 @@ static inline float ADC_Read_Alt_Voltage(void) {
 	return (ADC_Read_Raw(13) * (EEPROM_Read_REF_V() / 1024) * EEPROM_Read_V_CAL_ALT());
 }
 
+// Read EXT input voltage
+static inline float ADC_Read_EXT_Voltage(uint8_t ext) {
+	uint8_t port = 14;
+	uint16_t working = 0;
+	
+	if (ext == 0) { port = 14; } else { port = 15; }
+	return (ADC_Read_Raw(port) * (EEPROM_Read_REF_V() / 1024));
+}
+
 // Return raw counts from the ADC
 // Ports 0-11 are current sensors for the 12 ports
 // Port 12 is the ADC channel for the MAIN bus
@@ -1215,7 +1233,7 @@ static inline uint16_t ADC_Read_Raw(uint8_t port) {
 #else
 			PORTF &= ~(1 << SPI_SS_1);
 #endif
-		} else if (port >= 6 && port < 12) {
+		} else if (port >= 6 && port < 12 || port == 14 || port == 15) {
 #ifndef TESTBOARD
 			PORTB &= ~(1 << SPI_SS_2);
 #else
@@ -1236,7 +1254,7 @@ static inline uint16_t ADC_Read_Raw(uint8_t port) {
 #else
 			PORTF |= (1 << SPI_SS_1);
 #endif
-		} else if (port >= 6 && port < 12) {
+		} else if (port >= 6 && port < 12 || port == 14 || port == 15) {
 #ifndef TESTBOARD
 			PORTB |= (1 << SPI_SS_2);
 #else

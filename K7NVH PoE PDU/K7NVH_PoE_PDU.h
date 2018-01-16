@@ -36,7 +36,7 @@
 
 #define SOFTWARE_STR "\r\nK7NVH PoE PDU"
 #define HARDWARE_VERS "1.1"
-#define SOFTWARE_VERS "1.1"
+#define SOFTWARE_VERS "1.2"
 #define PORT_CNT    12
 #define INPUT_CNT	12
 #define DATA_BUFF_LEN    32
@@ -233,10 +233,13 @@ const uint8_t Ports_Pins[PORT_CNT] = \
 		{PD0, PD1, PD2, PD3, PD5, PD4, PD6, PD7, PB4, PB5, PB6, PC6};
 
 // Port to ADC channel lookup table
-const uint8_t Ports_ADC[PORT_CNT + 2] = \
+// 1,2,3,4,5,6
+// 7,8,9,10,11,12
+// Main,Alt,Ext1,Ext2
+const uint8_t Ports_ADC[PORT_CNT + 4] = \
 		{0b10000000, 0b10010000, 0b10100000, 0b10110000, 0b11000000, 0b11010000, \
 		 0b10000000, 0b10010000, 0b10100000, 0b10110000, 0b11000000, 0b11010000, \
-		 0b11100000, 0b11110000};
+		 0b11100000, 0b11110000, 0b11100000, 0b11110000};
 
 // State Variables
 ps_set PORT_STATE[PORT_CNT];
@@ -332,6 +335,7 @@ static inline void DEBUG_Dump(void);
 static inline float ADC_Read_Port_Current(uint8_t port);
 static inline float ADC_Read_Main_Voltage(void);
 static inline float ADC_Read_Alt_Voltage(void);
+static inline float ADC_Read_EXT_Voltage(uint8_t ext);
 static inline int16_t ADC_Read_Temperature(void);
 static inline uint16_t ADC_Read_Raw(uint8_t adc);
 
