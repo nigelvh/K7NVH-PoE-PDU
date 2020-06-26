@@ -836,30 +836,34 @@ static inline void LED_CTL(uint8_t led, uint8_t state) {
 
 // Check all ports for exceeding current limits, disable the port, and set the RED led.
 static inline void Check_Current_Limits(void){
-	// Check for above threshold current usage
+	// Run through all the ports
 	for (uint8_t i = 0; i < PORT_CNT; i++) {
-		if (PORT_Check_Current_Limit(i)) {
-			// If this port has already overloaded, don't repeat the message.
-			if ((PORT_STATE[i] & 0x02) > 0) break;
+		// Only check ports that are actually enabled
+		if ((PORT_STATE[i] & 0x01) > 0) {
+			// Check the ports against configured current limits
+			if (PORT_Check_Current_Limit(i)) {
+				// If this port has already overloaded, don't repeat the message.
+				if ((PORT_STATE[i] & 0x02) > 0) break;
 		
-			// Current is above threshold. Print a warning message.
-			fprintf(&USBSerialStream, "\r\n");
-			printPGMStr(STR_Overload);
+				// Current is above threshold. Print a warning message.
+				fprintf(&USBSerialStream, "\r\n");
+				printPGMStr(STR_Overload);
 						
-			// Disable the port
-			PORT_CTL(i, 0);
+				// Disable the port
+				PORT_CTL(i, 0);
 			
-			// Mark the overload bit for this port
-			PORT_STATE[i] |= 0b00000010;
+				// Mark the overload bit for this port
+				PORT_STATE[i] |= 0b00000010;
 				
-			// If a port overloads, make sure that voltage control gets disabled
-			// Does not disable voltage control settings stored in EEPROM
-			PORT_STATE[i] &= 0b11111011;
+				// If a port overloads, make sure that voltage control gets disabled
+				// Does not disable voltage control settings stored in EEPROM
+				PORT_STATE[i] &= 0b11111011;
 				
-			// Turn the error LED on.
-			LED_CTL(1, 1);
+				// Turn the error LED on.
+				LED_CTL(1, 1);
 				
-			INPUT_Clear();
+				INPUT_Clear();
+			}
 		}
 	}
 		

@@ -36,7 +36,7 @@
 
 #define SOFTWARE_STR "\r\nK7NVH PoE PDU"
 #define HARDWARE_VERS "1.1"
-#define SOFTWARE_VERS "1.2"
+#define SOFTWARE_VERS "1.3"
 #define PORT_CNT    12
 #define INPUT_CNT	12
 #define DATA_BUFF_LEN    32
