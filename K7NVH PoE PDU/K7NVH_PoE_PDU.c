@@ -21,6 +21,14 @@ ISR(TIMER1_COMPA_vect){
 	if ((timer) % IRST_DELAY == 0){ schedule_reset_current = 1; }
 }
 
+#ifdef DEBUG
+extern char *__brkval;
+int freeMemory() {
+	char top;
+	return __brkval ? &top - __brkval : &top - __malloc_heap_start;
+}
+#endif
+
 // Main program entry point.
 int main(void) {
 	// Store our reset vector for reference
@@ -31,6 +39,7 @@ int main(void) {
 	// Initialize some variables
 	int16_t BYTE_IN = -1;
 	DATA_IN = malloc(DATA_BUFF_LEN);
+	DATA_IN_START = DATA_IN;
 	for(uint8_t i = 0; i < PORT_CNT; i++){
 		PORT_HIGH_WATER[i] = 0;
 	}
@@ -129,6 +138,13 @@ int main(void) {
 				case '\n':
 				case '\r':
 					// Newline, Parse our command
+#ifdef DEBUG
+					fprintf(&USBSerialStream, "\r\nSTR: %s\t", DATA_IN);
+					fprintf(&USBSerialStream, "%i\r\n", DATA_IN_POS);
+					for (uint8_t i = 0; i < DATA_BUFF_LEN; i++) {
+						fprintf(&USBSerialStream, "%p ", &DATA_IN[i]);
+					}
+#endif
 					INPUT_Parse();
 					INPUT_Clear();
 					break;
@@ -223,7 +239,11 @@ int main(void) {
 
 // Flush out our data input buffer, reset our position variable, and print a new prompt.
 static inline void INPUT_Clear(void) {
+	// Reset the DATA_IN pointer to the start position, as we advance it during parsing
+	DATA_IN = DATA_IN_START;
+	// Reset the data in DATA_IN to 0
 	memset(&DATA_IN[0], 0, sizeof(DATA_IN));
+	// Reset our position counter to 0
 	DATA_IN_POS = 0;
 	
 	// Read PDU name
@@ -332,6 +352,7 @@ static inline void INPUT_Parse(void) {
 			cycle_ports = pd;
 			cycle_timer = EEPROM_Read_PCycle_Time() * TICKS_PER_SECOND;
 		}
+		
 		return;
 	}
 	// SETCYCLE - Set PCYCLE_TIME and store in EEPROM
@@ -624,6 +645,10 @@ static inline void INPUT_Parse(void) {
 	
 	// If none of the above commands were recognized, print a generic error.
 	printPGMStr(STR_Unrecognized);
+#ifdef DEBUG
+	fprintf(&USBSerialStream, "\r\nSTR: %s\t", DATA_IN);
+	fprintf(&USBSerialStream, "%i\r\n", DATA_IN_POS);
+#endif
 }
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1164,6 +1189,12 @@ static inline void DEBUG_Dump(void) {
 	for (uint8_t i = 0; i < PORT_CNT; i++) {
 		fprintf(&USBSerialStream, "%.2f ", (PORT_HIGH_WATER[i] / 100.0));
 	}
+
+#ifdef DEBUG
+	// Free Memory (Space between Heap and Stack)
+	printPGMStr(PSTR("\r\nFree Mem: "));
+	fprintf(&USBSerialStream, "%i", freeMemory());
+#endif
 }
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

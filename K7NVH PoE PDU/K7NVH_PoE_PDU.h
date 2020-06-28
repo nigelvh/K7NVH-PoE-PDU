@@ -30,6 +30,9 @@
 // Adjust the pins used to correspond with the prototype V1.0 build
 //#define TESTBOARD
 
+// Enable some debug printing
+//#define DEBUG
+
 // Enable ANSI color codes to be sent. Uses a small bit of extra program space for 
 // storage of color codes/modified strings.
 #define ENABLECOLORS
@@ -244,7 +247,8 @@ const uint8_t Ports_ADC[PORT_CNT + 4] = \
 // State Variables
 ps_set PORT_STATE[PORT_CNT];
 pbs_set PORT_BOOT_STATE[PORT_CNT];
-char * DATA_IN;
+char * DATA_IN; // Variable to hold input data for parsing
+char * DATA_IN_START; // Variable to hold the *original* position of DATA_IN so we can reset after parsing
 uint8_t DATA_IN_POS = 0;
 uint8_t PORT_HIGH_WATER[PORT_CNT];
 
